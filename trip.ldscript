@@ -1,0 +1,11 @@
+MEMORY {
+    RAM     (rw)    : ORIGIN = 0x0, LENGTH = 128k
+    STACK   (rw)    : ORIGIN = 0x1700, LENGTH = 256
+}
+
+SECTIONS {
+    .text : {} > RAM
+    .data : {} > RAM
+    .bss  : {} > RAM
+    .stack : {} > STACK
+}
