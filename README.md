@@ -30,7 +30,7 @@ $ sh dump.sh > outer.X
 
 ## SBCエミュレータ
 
-SBCエミュレータ[`Musashi`]改(https://github.com/tendai22/Musashi)を用いると、ハードウェアなしでLinux上で外部インタプリタを試すことができます。この中の`example/m68kcpu.c`の命令実行ループの中に仕込みを入れて、ブレークポイントとシングルステップ機能を入れて、narrowroadのアセンブラプログラムを開発していました。
+SBCエミュレータ [`Musashi`改](https://github.com/tendai22/Musashi) を用いると、ハードウェアなしでLinux上で外部インタプリタを試すことができます。この中の`example/m68kcpu.c`の命令実行ループの中に仕込みを入れて、ブレークポイントとシングルステップ機能を入れて、narrowroadのアセンブラプログラムを開発していました。
 
 `Musashi`改をcloneしmakeすると、コマンド`sim`が生成されます。この引数に`outer.X`を指定するとプログラム実行を開始します。`Musashi`リポジトリで得られた`sim`コマンドを本リポジトリにコピーして、
 
