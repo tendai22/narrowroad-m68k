@@ -13,7 +13,8 @@ case "$ORG" in
 esac
 # prefix
 cat <<EOF
-    .org   $ORG /*dict_top */
+    /*.org   $ORG dict_top */
+    .section DICT
 dict:
     dc.w   dict
     dc.w   entry_end
@@ -28,7 +29,7 @@ BEGIN {
 /^word/ || /^code/{
     name = $2
     n = length(name);
-    print n, name
+    #print n, name
     body = ""
     i = 0;
     
@@ -74,5 +75,9 @@ BEGIN {
         next
     }
     body = body "|" $0;
+}
+END {
+    print "entry_end:"
+    printf "    .equ entry_head, entry_%03d\n", --nels
 }
 '

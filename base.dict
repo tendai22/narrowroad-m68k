@@ -1,0 +1,21 @@
+#
+# base.dict .... makedict.sh sample dictionary template
+#
+
+org 0x2000
+
+word abc
+    lit
+    1
+    lit
+    2
+    add
+    endword
+code defgh
+    mov.w  #1,-(%a5)        /* a5 is DSP */
+    mov.w  #2,-(%a5)
+    mov.w  (%a5)+,%d0
+    add.w  (%a5)+,%d0
+    mov.w  %d0,-(%a5)
+    endcode
+
