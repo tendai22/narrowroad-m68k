@@ -8,13 +8,16 @@
     .equ    dict_top, 0x2000
     .equ    ram_end, 0x10000
 
-    .org    0
-    dc.l    end_ram
+/*
+ * 68000 vector table
+ */
+    .section VECTOR_TABLE
+    dc.l    ram_end
     dc.l    start
 /*
  * code segment
  */
-    .org    code_top
+    .section CODE
     .equ    code_top,  ram_top
     .equ    dict,  code_top + 0x1000
     .equ    linbuf,    dict_top + 0x1000
@@ -34,7 +37,7 @@ start:
     |.define IP a6
     |.define DSP a5
     |.define RSP a4
-    move.l   #end_ram,%a7       /* set stack pointer */
+    move.l   #ram_end,%a7       /* set stack pointer */
     move.l   #dsp_end,%a5        /* set DSP */
     move.l   #rsp_end,%a4       /* set RSP */
 /*
@@ -722,7 +725,7 @@ find1:
   * dictionary
   */
 
-    .org   0x2000 /*dict_top */
+    .section DICT
 dict:
     dc.w   dict
     dc.w   entry_end
