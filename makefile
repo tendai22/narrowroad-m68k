@@ -21,14 +21,17 @@ a.out:  $(OBJS)
 $(NAME).list:  a.out
 	$(OBJDUMP) --start-address=0x1000 --stop-address=0x1fff -D a.out |tee $(NAME).list
 
-$(NAME).dict: a.out
+$(NAME).dict: a.out dictdump
 	sh dictdump.sh > $(NAME).dict 
 
 $(NAME).X: a.out
 	sh dump.sh > $(NAME).X
 
-dict.s:  base.dict
-	sh makedict.sh $*.dict > dict.s
+dict.s:  base.dict makedict.sh
+	sh makedict.sh > dict.s
+
+dictdump: dictdump.c
+	cc -o dictdump dictdump.c
 
 clean: $(OBJS) $(LISTS)
 	$(RM) $(OBJS) $(LISTS)

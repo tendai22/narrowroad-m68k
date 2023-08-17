@@ -27,9 +27,12 @@ BEGIN {
     prev_link = "0"
 }
 /^word/ || /^code/{
-    name = $2
-    n = length(name);
-    #print n, name
+    str = name = $2
+    if (NF > 2) {
+        name = $3
+    }
+    n = length(str);
+    #print n, str
     body = ""
     i = 0;
     
@@ -37,10 +40,10 @@ BEGIN {
 }
 /endword/ || /endcode/ {
     flag = ($0 ~ /word/);
-    printf "entry_%03d:\n", nels++;
+    printf "entry_%03d:\n", nels;
     printf "e_%s:\n", name
     printf "    dc.b    %d\n", n
-    printf "    .ascii  \"%s\"\n", name
+    printf "    .ascii  \"%s\"\n", str
     printf "    .align  2\n"
     printf "    dc.w    %s\n", prev_link
     printf "do_%s:\n", name
@@ -62,11 +65,12 @@ BEGIN {
         print "    " s
     }
     if (flag == 1) {
-        print "    dc.w   do_exit"
+        print "    dc.w    do_exit"
     } else {
-        print "    jmp    do_exit"
+        print "    jmp     do_next"
     }
     prev_link = sprintf("entry_%03d", nels);
+    nels++;
     next
 }
 {
