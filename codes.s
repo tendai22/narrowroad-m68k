@@ -46,6 +46,15 @@ start:
  */
 outer:
 outer1:
+    /* stack underflow check */
+    cmp.l  #dsp_end,%a5
+    ble    outer1_1
+outer_uerr:
+    /* underflow, rest dsp */
+    move.l  #dsp_end,%a5
+    move.l  #underflow_str,%a0
+    jsr     (putstr)
+outer1_1:
     /* main loop */
     jsr    (dump_stack)
     move.b  #93,%d0             /* ']' as a prompt */
@@ -171,20 +180,23 @@ dump_s1:
     jsr      (puthex4)
     jsr      (bl)
     bra      dump_s1
-
 dump_se:
     move.w   (%a7)+,%d0
     move.l   (%a7)+,%a1
     move.l   (%a7)+,%a0
     rts
 
+
 /*
  * strings
  */
-
+underflow_str:
+    dc.b    9
+    .ascii  "underflow"
+    .align  2
 halt_message:
     dc.b    4
-    .string  "halt"
+    .ascii  "halt"
     .align 2
 /*
  * do_system ... halt the interpreter
@@ -198,6 +210,7 @@ do_system0:
 /*
  *  putch ... put one char from %d0
  */
+    .global  putch
 putch:
     move.w    %d0,-(%a7)          /*  push %d0 */
 putch1:
@@ -272,6 +285,7 @@ puthex12:
  * putnum:
  * In: %d0  input value to be printed
  */
+    .global do_putnum
 do_putnum:
 putnum:
     move.l  %d0,-(%a7)
@@ -281,8 +295,9 @@ putnum:
     move.l  %d4,-(%a7)
     eor.l   %d4,%d4
     /* chech minus or plus */
-    and.l   %d0,%d0
-    bge     putnum1
+    cmp.l   #0,%d0
+    bpl     putnum1
+    beq     putnum1
     neg.l   %d0
     and.l   %d0,%d0
     beq     putnum1
@@ -371,6 +386,7 @@ do_exit:
     move.w  (%a6),%a0
     add.w   #2,%a6
     jmp     (%a0)
+    .global do_next
 do_next:
     move.w  (%a6),%a0             /* 3 instructions equivalent to jmp  (%a6)+ */
     add.w   #2,%a6

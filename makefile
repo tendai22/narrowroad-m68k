@@ -7,7 +7,7 @@ LD=m68k-elf-ld
 AS=m68k-elf-as
 RM=rm -f
 
-OBJS=$(NAME).o codes.o dict.o
+OBJS=codes.o dict.o
 LISTS=$(NAME).dict $(NAME).list $(NAME).X
 
 .s.o:
@@ -33,5 +33,5 @@ dict.s:  base.dict makedict.sh
 dictdump: dictdump.c
 	cc -o dictdump dictdump.c
 
-clean: $(OBJS) $(LISTS)
+clean:
 	$(RM) $(OBJS) $(LISTS)

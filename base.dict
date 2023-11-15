@@ -22,7 +22,7 @@ word test
     abc
     endword
 code pop
-    jmp    do_next
+    add.w   #2,%a5
     endcode
 code + plus
     move.w  (%a5)+,%d0
@@ -40,4 +40,14 @@ code cr
     jsr     (putch)
     move.b  #10,%d0
     jsr     (putch)
+    endcode
+code @ atfetch
+    move.w  (%a5),%a0
+    move.w  (%a0),%d0
+    move.w  %d0,(%a5)
+    endcode
+code ! exclamation
+    move.w  (%a5)+,%a0
+    move.w  (%a5)+,%d0
+    move.w  %d0,(%a0)
     endcode
