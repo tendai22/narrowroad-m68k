@@ -19,6 +19,8 @@ linbuf:
     .space 128
 wordbuf:
     .space 128
+putnumbuf:
+    .space 16
 
     .section STACK
 stack_bottom:
@@ -270,6 +272,7 @@ puthex2:
     jsr     (puthex1)
     rts
 puthex1:
+    move.w  %d0,-(%a7)
     and.w   #0xf,%d0
     sub.b   #10,%d0
     bcs     puthex11
@@ -280,6 +283,28 @@ puthex11:
     add.b   #('0'+10),%d0
 puthex12:
     jsr     (putch)
+    move.w  (%a7)+,%d0
+    rts
+/* safe routines */
+puthex4_safe:
+    move.l  %d0,-(%a7)
+    jsr     (puthex4)
+    move.l  (%a7)+,%d0
+    rts
+puthex2_safe:
+    move.l  %d0,-(%a7)
+    jsr     (puthex2)
+    move.l  (%a7)+,%d0
+    rts
+bl_safe:
+    move.l  %d0,-(%a7)
+    jsr     (bl)
+    move.l  (%a7)+,%d0
+    rts
+putch_safe:
+    move.l  %d0,-(%a7)
+    jsr     (putch)
+    move.l  (%a7)+,%d0
     rts
 /*
  * putnum:
@@ -293,39 +318,49 @@ putnum:
     move.l  %d2,-(%a7)
     move.l  %d3,-(%a7)
     move.l  %d4,-(%a7)
+    move.l  %a0,-(%a7)
     eor.l   %d4,%d4
     /* chech minus or plus */
-    cmp.l   #0,%d0
+    cmp.w   #0,%d0
     bpl     putnum1
     beq     putnum1
-    neg.l   %d0
-    and.l   %d0,%d0
+    neg.w   %d0
+    and.w   %d0,%d0
     beq     putnum1
-    move.l  %d0,%d3
+    move.l  %d0,%d1
     move.b  #45,%d0         /* '-' */
     jsr     (putch)
-    move.l  %d3,%d0
+    move.l  %d1,%d0
 putnum1:
-    move.l  %d0,%d3         /* save %d0 */
     move.w  __base,%d1
-    move.w  #1,%d2
+    move.l  #(putnumbuf+16),%a0
 putnum3:
-    /* extract top digit */
-    cmp.l   %d1,%d0
-    bmi     putnum2
-    divu    %d1,%d0
+    /* divide __base, and print the reminder */
+    divu.w  %d1,%d0     /* reminder: upper16, quotient:lower16 */
+    /* convert one digit to ASCII */
+    swap    %d0
+    move.l  %d0,%d2
+    and.w   #0xf,%d0
+    sub.b   #10,%d0
+    bcs     putnum11
+    /* 10-15 */
+    add.b   #('A'-'0'-10),%d0
+putnum11:
+    add.b   #('0'+10),%d0
+    /* store a disit ASCII to putnumbuf[--i] */
+    move.b  %d0,-(%a0)  /* put digit ASCII to putnumbuf[--p] */
+    move.l  %d2,%d0
+    swap    %d0
     and.l   #65535,%d0
-    mulu    %d1,%d2
-    bra     putnum3
-    /* less than __base, print it */
-putnum2:
-    jsr     (put1digit)
-    mulu    %d2,%d0         /* top one digit * 1000 */
-    sub.l   %d0,%d3         /* eliminate top 1 digit */
-    beq     putnum_e
-    move.l  %d3,%d0
-    bra     putnum1
+    bne     putnum3        /* quit if it is zero */
+    /* ok, convertion is over, print it now */
+putnum4:
+    move.b  (%a0)+,%d0
+    jsr     (putch)
+    cmp.l   #(putnumbuf+16),%a0
+    bne     putnum4
 putnum_e:
+    move.l  (%a7)+,%a0
     move.l  (%a7)+,%d4
     move.l  (%a7)+,%d3
     move.l  (%a7)+,%d2
