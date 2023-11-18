@@ -17,10 +17,10 @@ ram_top:
     .section BUFFER
 linbuf:
     .space 128
+linbufend:
 wordbuf:
     .space 128
-putnumbuf:
-    .space 16
+
 
     .section STACK
 stack_bottom:
@@ -285,7 +285,9 @@ puthex12:
     jsr     (putch)
     move.w  (%a7)+,%d0
     rts
-/* safe routines */
+/*
+ * safe routines 
+ */
 puthex4_safe:
     move.l  %d0,-(%a7)
     jsr     (puthex4)
@@ -333,7 +335,7 @@ putnum:
     move.l  %d1,%d0
 putnum1:
     move.w  __base,%d1
-    move.l  #(putnumbuf+16),%a0
+    move.l  #linbufend,%a0
 putnum3:
     /* divide __base, and print the reminder */
     divu.w  %d1,%d0     /* reminder: upper16, quotient:lower16 */
@@ -357,7 +359,7 @@ putnum11:
 putnum4:
     move.b  (%a0)+,%d0
     jsr     (putch)
-    cmp.l   #(putnumbuf+16),%a0
+    cmp.l   #linbufend,%a0
     bne     putnum4
 putnum_e:
     move.l  (%a7)+,%a0
@@ -559,7 +561,7 @@ do_number:
     move.w  %d4,-(%a7)      /* push %d4 */
     /*
      * %d4 bit0: minus flag,
-     *     bit1: data vaild flag
+     *     bit1: data valid flag
      * %d3 __base
      * %d2 accumulator
      * %d1 number of chars (rest chars)
