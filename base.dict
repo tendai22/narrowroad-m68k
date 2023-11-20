@@ -21,6 +21,8 @@ word test
     nop
     abc
     endword
+code add
+    jmp  do_plus
 code pop
     add.w   #2,%a5
     endcode
@@ -41,9 +43,19 @@ code cr
     move.b  #10,%d0
     jsr     (putch)
     endcode
+code bl
+    move.b  #' ',%d0
+    jsr     (putch)
+    endcode
 code @ atfetch
     move.w  (%a5),%a0
     move.w  (%a0),%d0
+    move.w  %d0,(%a5)
+    endcode
+code C@ bytefetch
+    move.w  (%a5),%a0
+    move.b  (%a0),%d0
+    and.w   #255,%d0
     move.w  %d0,(%a5)
     endcode
 code ! exclamation
@@ -51,3 +63,9 @@ code ! exclamation
     move.w  (%a5)+,%d0
     move.w  %d0,(%a0)
     endcode
+code C! bytedeposite
+    move.w  (%a5)+,%a0
+    move.w  (%a5)+,%d0
+    move.b  %d0,(%a0)
+    endcode
+

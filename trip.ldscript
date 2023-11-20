@@ -1,6 +1,6 @@
 MEMORY {
     RAM     (rw)    : ORIGIN = 0x0, LENGTH = 128k
-    STACK   (rw)    : ORIGIN = 0xff00, LENGTH = 256
+    STACK   (rw)    : ORIGIN = 0xfc00, LENGTH = 768
 }
 
 SECTIONS {
