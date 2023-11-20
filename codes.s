@@ -410,7 +410,7 @@ do_list:                        /* %a0 points to the code of the word,
     move.w  %a6,-(%a4)          /* push IP */
     move.w  %a0,%a6             /* address points to the code area of new word
                                  * IP now points to the address of the first pointer */
-    add.w   #4,%a6              /* IP points the first token address
+    add.w   #6,%a6              /* IP points the first token address
                                  * the size of `jmp do_list` is 4 bytes
                                  */
     jmp     do_next

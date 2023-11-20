@@ -101,28 +101,64 @@ do_cr:
     jsr     (putch)
     jmp     do_next
 entry_008:
+e_bl:
+    dc.b    2
+    .ascii  "bl"
+    .align  2
+    dc.w    entry_007
+do_bl:
+    
+    move.b  #' ',%d0
+    jsr     (putch)
+    jmp     do_next
+entry_009:
 e_atfetch:
     dc.b    1
     .ascii  "@"
     .align  2
-    dc.w    entry_007
+    dc.w    entry_008
 do_atfetch:
     
     move.w  (%a5),%a0
     move.w  (%a0),%d0
     move.w  %d0,(%a5)
     jmp     do_next
-entry_009:
+entry_010:
+e_bytefetch:
+    dc.b    2
+    .ascii  "C@"
+    .align  2
+    dc.w    entry_009
+do_bytefetch:
+    
+    move.w  (%a5),%a0
+    move.b  (%a0),%d0
+    and.w   #255,%d0
+    move.w  %d0,(%a5)
+    jmp     do_next
+entry_011:
 e_exclamation:
     dc.b    1
     .ascii  "!"
     .align  2
-    dc.w    entry_008
+    dc.w    entry_010
 do_exclamation:
     
     move.w  (%a5)+,%a0
     move.w  (%a5)+,%d0
     move.w  %d0,(%a0)
     jmp     do_next
+entry_012:
+e_bytedeposite:
+    dc.b    2
+    .ascii  "C!"
+    .align  2
+    dc.w    entry_011
+do_bytedeposite:
+    
+    move.w  (%a5)+,%a0
+    move.w  (%a5)+,%d0
+    move.b  %d0,(%a0)
+    jmp     do_next
 entry_end:
-    .equ entry_head, entry_009
+    .equ entry_head, entry_012
