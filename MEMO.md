@@ -58,5 +58,6 @@ C@, C!を追加した。バイトアクセス
 
 * 起動直後、cr, blは動作する。
 * add呼び出し→add not found, 以後cr, blともにnot foundとなる。
+  add,abc呼び出し後もだめ。inner interpreterが動作していない様子。デバッグ必要。
 * abcが動作しない。nop not foundが出る。
 
