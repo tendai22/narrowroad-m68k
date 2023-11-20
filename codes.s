@@ -404,6 +404,25 @@ bl:
     move.b  #' ',%d0
     bra.b   putone
 /*
+ * TYPEB
+ */
+/* do_typeb_sub:
+ * IN: %a0 ... addr
+ */
+typeb_sub:
+    move.l  (%d0),-(%a7)
+typeb_sub1:
+    move.b  (%a0)+,%d0
+    jsr     (putch)
+    cmp.b   #' ',%d0
+    bne     typeb_sub1
+    move.l  (%a7)+,%d0
+    rts
+
+
+
+
+/*
  * inner interpreter
  */
     .global do_list
