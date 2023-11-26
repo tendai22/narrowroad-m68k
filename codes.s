@@ -21,6 +21,10 @@ linbufend:
 wordbuf:
     .space 128
 
+    .section VARIABLE
+    .global __base
+__base:
+    dc.w   10
 
     .section STACK
 stack_bottom:
@@ -72,7 +76,6 @@ outer1_1:
      */
     and.l   %d0,%d0
     beq     outer1               /* re getline */
-
 /*
  * do_number
  */
@@ -540,10 +543,6 @@ acceptz2:
  * In: %d0  ... character
  * Out: %d0 ... result number (positive), not-a-numer (negative)
  */
-
-    .global __base
-__base:   dc.w  10
-
 tonumber:
     cmp.b   #96,%d0
     bmi     tonumber0
@@ -740,7 +739,6 @@ do_word4:
  * Out: %d0: Zero ... match, NZ .. not same
  */
 do_same:
-bp000:
     move.w  %d1,-(%a7)      /* push %d1 */
     move.w  %a1,-(%a7)
     move.w  %a0,-(%a7)
