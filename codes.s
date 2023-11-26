@@ -86,19 +86,8 @@ outer3:
     /* In: %a0 ... input string,
      *     %d1 ... (rest) number of characters(length of input string)
      */
-    jsr     (do_number)
-    /* Out: %a0 .. next position in input string
-     *     %d1 ... rest number of characters (or zero)
-     *     %d2: converted do_number
-     *     %d0 ... validity flag, Zero: value of %d2 is valid, Non-Zero: not valid
-     */
-    and.l   %d0,%d0
-    bne     outer4
-    /* get a number, push it */
-    move.w  %d2,-(%a5)          /* put a number to DSP */
-    bra     outer3
 outer4:
-    /* not a number, now get a word */
+    /* at first, get a word */
     /* In: %a0 ... input string,
      *     %d1 ... number of input characters(length of input string)
      *     %a1 ... destination buffer, [0]: length, [1...]: characters
@@ -149,19 +138,42 @@ do_exec:
     jmp      (%a0)
 next_addr:
     dc.w     next_addr2
+outer5:
+    /* word not found, try to convert a number */
+    /* In: %a0 ... input string, (wordbuf)
+     *     %d1 ... (rest) number of characters(length of input string)
+     */
+    move.l  #wordbuf,%a0
+    move.b  (%a0)+,%d1
+    and.w   #255,%d1
+    /* In: %a0 ... input string,
+     *     %d1 ... max number of characters(length of input string)
+     */
+    jsr     (do_number)
+    /* Out: %a0 .. next position in input string
+     *     %d1 ... rest number of characters (or zero)
+     *     %d2: converted do_number
+     *     %d0 ... validity flag, Zero: value of %d2 is valid, Non-Zero: not valid
+     */
+    and.l   %d0,%d0
+    bne     outer7
+    /* get a number, push it */
+    move.w  %d2,-(%a5)          /* put a number to DSP */
+    bra     next_addr2
 next_addr2:
     /* restore input linbuf, and rest size */
-    move.w   (%a7)+,%d2
-    move.w   (%a7)+,%d1
-    move.l   (%a7)+,%a0
     /* now the entry execution finished */
     jmp      outer3
     /* error message */
 notfound_str:
     dc.b     11
     .ascii  "not found\r\n"
-outer5:
-    /* word not found, error message */
+outer7:
+    /* rewind stack */
+    move.w   (%a7)+,%d2
+    move.w   (%a7)+,%d1
+    move.l   (%a7)+,%a0
+    /* not found error */
     jsr     (crlf)
     move.l  #wordbuf,%a0
     jsr     (putstr)
@@ -170,6 +182,7 @@ outer5:
     jsr     (putstr)
     /* dispose linbuf content, re-getline */
     bra     outer1
+    /* end of word/number process, go to rest of linbuf */
 
 /* stack dump */
 dump_stack:
