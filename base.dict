@@ -7,7 +7,7 @@ word abc
     lit
     1
     lit
-    2
+    50
     add
     endword
 code defgh
@@ -37,7 +37,7 @@ code . period
     move.w  (%a5)+,%d0
     jsr     (do_putnum)
     endcode
-code cr
+code crr
     move.b  #13,%d0
     jsr     (putch)
     move.b  #10,%d0
@@ -68,4 +68,8 @@ code C! bytedeposite
     move.w  (%a5)+,%d0
     move.b  %d0,(%a0)
     endcode
+code base
+    move.w  #__base,-(%a5)
+    endcode
+
 

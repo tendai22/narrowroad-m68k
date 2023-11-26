@@ -14,7 +14,7 @@ int tohex(int c)
     return 0;
 }
 
-char readchar(FILE *fp)
+int readchar(FILE *fp)
 {
     int c, d, count = 0, skip = 0;
     d = 0;
@@ -83,7 +83,7 @@ static void dump_entry(word_t begin, int size)
     for (i = 0; i < nstr; ++i) {
         printf("%c", get_byte(begin + index + i));
     }
-    index = ((nstr + 1) / 2) * 2;
+    index = ((nstr + 2) / 2) * 2;
     printf("\"\n");
     printf("%04x    %04x (link)\n", begin + index, get_word(begin + index));
     index += 2;
@@ -104,12 +104,14 @@ int main(int ac, char **av)
     // get header addresses
     len = p - &buf[0];
     base = 0;
-#if 0
+#if 0 
     for (int i = 0; i < len; i += 2) {
+        if ((i % 16) == 0)
+            fprintf(stderr,"%04X: ", i + 0x2000);
         w = get_word(i);
-        printf("%04X ", w);
-        if (i % 8 == 0)
-            printf("\n");
+        fprintf(stderr,"%04X ", w);
+        if (((i + 2) % 16) == 0)
+            fprintf(stderr,"\n");
     }
 #endif
     base = 0;

@@ -40,6 +40,11 @@ BEGIN {
 }
 /endword/ || /endcode/ {
     flag = ($0 ~ /word/);
+    x = n % 2
+    printf "/* n = %d, n % 2 == %d */\n", n, x 
+    if (n % 2 == 0) {
+        str = str " "
+    }
     printf "entry_%03d:\n", nels;
     printf "e_%s:\n", name
     printf "    dc.b    %d\n", n
@@ -54,7 +59,9 @@ BEGIN {
     n = split(body, a, /\|/)
     for (i in a) {
         s = a[i];
-
+        if (s ~ /^$/) {
+            continue
+        }
         if (flag == 1) {
             if (s ~ /^[a-zA-Z][a-zA-Z0-9]*/) {
                 s = "dc.w    do_" s;

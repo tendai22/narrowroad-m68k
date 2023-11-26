@@ -9,11 +9,12 @@ RM=rm -f
 
 OBJS=codes.o dict.o
 LISTS=$(NAME).dict $(NAME).list $(NAME).X
+TMPS=dict.s a.dict a.out a.symbols codes.list dict.list
 
 .s.o:
-	$(AS) -o $*.o $*.s
+	$(AS) -a=$*.list -o $*.o $*.s
 
-all: $(NAME).X
+all: $(NAME).X bp.X $(NAME).dict $(NAME).list
 
 a.out:  $(OBJS)
 	$(LD) -T trip.ldscript $(OBJS)
@@ -26,6 +27,9 @@ $(NAME).dict: a.out dictdump
 
 $(NAME).X: a.out
 	sh dump.sh > $(NAME).X
+
+bp.X: a.out
+	sh extract_bp.sh > bp.X
 
 dict.s:  base.dict makedict.sh
 	sh makedict.sh > dict.s

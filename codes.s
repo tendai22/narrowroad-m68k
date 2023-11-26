@@ -457,9 +457,9 @@ do_lit:
 /* do_add */
     .global do_add
 do_add:
-    move.l  (%a5)+,%d0          /* POP to %d0 */
+    move.w  (%a5)+,%d0          /* POP to %d0 */
     add.w   (%a5)+,%d0          /* POP and add to %d0 */
-    move.l  %d0,-(%a5)          /* PUSH it to DS */
+    move.w  %d0,-(%a5)          /* PUSH it to DS */
     bra.b   do_next
 /* do_code */
 do_code:
@@ -523,6 +523,9 @@ acceptdel:
     jsr     (putch)
     bra.b   acceptl  
 acceptz:
+    /* trailing space on the buffer */
+    move.b  #' ',(%a1,%d1)
+    add.w   #1,%d1
     /* return it */
     move.w  %d1,%d0
     move.w  (%a7)+,%d2
@@ -538,6 +541,7 @@ acceptz2:
  * Out: %d0 ... result number (positive), not-a-numer (negative)
  */
 
+    .global __base
 __base:   dc.w  10
 
 tonumber:
@@ -736,14 +740,15 @@ do_word4:
  * Out: %d0: Zero ... match, NZ .. not same
  */
 do_same:
+bp000:
     move.w  %d1,-(%a7)      /* push %d1 */
     move.w  %a1,-(%a7)
     move.w  %a0,-(%a7)
 do_same0:
     move.b  (%a0),%d0
     and.w   #255,%d0
-    lsr     #1,%d0
-    add.b   #1,%d0          /* %d0 / 2 + 1, now %d0 has a count */
+    add.b   #2,%d0
+    lsr     #1,%d0          /* (%d0 + 2) / 2 */
 do_same2:
     move.w  (%a0)+,%d1
     cmp.w   (%a1)+,%d1
@@ -771,9 +776,10 @@ find0:
     cmp.b   #0,%d0
     beq     find1
     /* get the next entry top */
+    eor.w   #0,%d0         /* clear D0 wordly */
     move.b  (%a1),%d0
+    add.b   #2,%d0
     lsr     #1,%d0
-    add.b   #1,%d0      /* %d0 / 2 +1 */
     add.w   %d0,%d0     /* word offset to byte offset */
     add.w   %d0,%a1
     move.w  (%a1),%d0   /* %d0 now points to next entry top */
@@ -792,4 +798,7 @@ find1:
     add.w   #2,%a1      /* skip PTR */
     move.w  (%a7)+,%d0
     rts
+sample:
+    jmp     do_list
+
 
