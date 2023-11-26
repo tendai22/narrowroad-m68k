@@ -1,0 +1,11 @@
+a.*
+base.s
+*.X
+*.list
+*.o
+dict.s
+dictdump
+narrowroad.X
+narrowroad.dict
+sim
+xx
