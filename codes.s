@@ -67,7 +67,7 @@ outer1_1:
     jsr    (putch)
     /* line input */
     move.l  #linbuf,%a0         /* &linbuf[0] */
-    move.w  #64,%d1
+    move.l  #64,%d1
 /*outer2:*/
     jsr     (accept)
     jsr     (crlf)
@@ -163,6 +163,10 @@ outer5:
 next_addr2:
     /* restore input linbuf, and rest size */
     /* now the entry execution finished */
+    /* rewind stack */
+    move.w   (%a7)+,%d2
+    move.w   (%a7)+,%d1
+    move.l   (%a7)+,%a0
     jmp      outer3
     /* error message */
 notfound_str:
