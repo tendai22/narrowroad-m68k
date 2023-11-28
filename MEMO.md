@@ -230,6 +230,64 @@ underflow]base
 * `base`を参照するときにゼロかどうかをチェックするか。これも微妙だが。
 
 * いずれにしても、ゼロ除算のエクセプションは、バスエラーエクセプションとともに組み込んでおくべきですね。これらのエクセプションが生じると、スタックをクリアしてouter loop 先頭に戻る。
+### Exception対応追加(11/28)
+
+* Illegal Instruction/Bus Error/Div by Zero に対してException ベクタ追加。
+* Exceptionベクタ`do_exception`では、メッセージを表示して初期化ルーチンに飛ぶ。
+* 初期化は、%a7(SP), %a5(DSP), %a4(RSP)に対して行う。
+* メモリ上変数は初期化されない、以前の状態のまま。
+
+#### ベクタテーブル
+
+* bus error とその他例外を設けた。
+
+```
+    .section VECTOR_TABLE
+    dc.l    sp_end          /* 0: Initial SP */
+    dc.l    start           /* 1: Initial PC */
+    dc.l    do_exception    /* 2: Access fault */
+    dc.l    do_buserror     /* 3: Address Error */
+    dc.l    do_exception    /* 4: Illegal Instruction */
+    dc.l    do_divbyzero    /* 5: Divide by Zero */
+```
+
+#### 例外処理ルーチン
+
+* アドレスをダンプした後メッセージを出す。
+* アドレスは%sp +2 のダブルワード
+
+```
+    .section CODE
+buserror_str:
+    dc.b    9
+    .ascii  "bus error "
+exception_str:
+    dc.b     9
+    .ascii  "exception "
+divbyzero_str:
+    dc.b    14
+    .ascii  "divide by zero "
+do_divbyzero:
+    move.l  #divbyzero_str,%a0
+    bra     do_exception_message
+do_buserror:
+    move.l  #buserror_str,%a0
+    bra     do_exception_message
+do_exception:
+    /* exception ... rewind SP, IP, DSP, RSP */
+    move.l  #exception_str,%a0
+do_exception_message:
+    jsr     (putstr)
+    jsr     (bl)
+    add.l   #2,%a7
+    move.l  (%a7),%a0         /* access address */
+    move.l  %a0,%d0
+    jsr     (puthex8) 
+    jsr     (crlf)
+    /* falling down to start */
+start:
+    ... (この先で%a7,%a5,%a4が初期化される)
+```
 
 ### IF/ELSE/THENとループ導入: 仮想命令(ブランチ)の追加
 

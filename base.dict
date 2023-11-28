@@ -71,5 +71,28 @@ code C! bytedeposite
 code base
     move.w  #__base,-(%a5)
     endcode
+code typeb
+    move.w  (%a5)+,%a0
+    jsr     (typeb_sub)
+    endcode
+code types
+    move.w  (%a5)+,%a0
+    jsr     (putstr)
+    endcode
+word ttest
+    lit
+    #true_str
+    types
+    endword
 
 
+word branch
+    bne
+    8
+    #true_str
+    types
+    bra
+    4
+    #false_str
+    types
+    endword

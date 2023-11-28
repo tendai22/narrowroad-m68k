@@ -5,8 +5,13 @@
     .equ    ram_end, 0x10000
 */
     .section VECTOR_TABLE
-    dc.l    sp_end
-    dc.l    start
+    dc.l    sp_end          /* 0: Initial SP */
+    dc.l    start           /* 1: Initial PC */
+    dc.l    do_exception    /* 2: Access fault */
+    dc.l    do_buserror     /* 3: Address Error */
+    dc.l    do_exception    /* 4: Illegal Instruction */
+    dc.l    do_divbyzero    /* 5: Divide by Zero */
+
 /*
  * code segment
  */
@@ -39,14 +44,43 @@ sp_end:
  * Forth interpreter initialize
  */
     .section CODE
+buserror_str:
+    dc.b    9
+    .ascii  "bus error "
+exception_str:
+    dc.b     9
+    .ascii  "exception "
+divbyzero_str:
+    dc.b    14
+    .ascii  "divide by zero "
+do_divbyzero:
+    move.l  #divbyzero_str,%a0
+    bra     do_exception_message
+do_buserror:
+    move.l  #buserror_str,%a0
+    bra     do_exception_message
+do_exception:
+    /* exception ... rewind SP, IP, DSP, RSP */
+    move.l  #exception_str,%a0
+do_exception_message:
+    jsr     (putstr)
+    jsr     (bl)
+    add.l   #2,%a7
+    move.l  (%a7),%a0         /* access address */
+    move.l  %a0,%d0
+    jsr     (puthex8) 
+    jsr     (crlf)
+    /* falling down to start */
 start:
     /* virtual Forth machine registers */
     |.define IP a6
     |.define DSP a5
     |.define RSP a4
+initial_point:
     move.l   #sp_end,%a7       /* set stack pointer */
     move.l   #dsp_end,%a5        /* set DSP */
     move.l   #rsp_end,%a4       /* set RSP */
+
 /*
  * outer interpreter 
  */
@@ -60,6 +94,7 @@ outer_uerr:
     move.l  #dsp_end,%a5
     move.l  #underflow_str,%a0
     jsr     (putstr)
+    jsr     (crlf)
 outer1_1:
     /* main loop */
     jsr    (dump_stack)
@@ -257,22 +292,32 @@ getch:
  * putstr
  * in: %a0: buf[0] ... n,length, buf[1]..[n] body of str
  */
+    .global putstr
 putstr:
     move.w  %a0,-(%sp)      /* push %a0 */
     move.w  %d1,-(%sp)      /* push %d1 */
     move.w  %d0,-(%sp)      /* push %d0 */
     move.b  (%a0)+,%d1      /* use %d1 as counter */
+    and.w   #0xff,%d1
 putstrl:
-    add.w   #-1,%d1          /* --%d1 */
-    blt     putstre
+    beq     putstre
     move.b  (%a0)+,%d0
     jsr     (putch)
+    add.w   #-1,%d1          /* --%d1 */
     bra.b   putstrl
 putstre:
     move.w  (%sp)+,%d0
     move.w  (%sp)+,%d1
     move.w  (%sp)+,%a0
     rts
+/*
+ * puthex8
+ */
+puthex8:
+    swap    %d0
+    jsr     (puthex4)
+    swap    %d0
+    /* falling down puthex4 */
 /*
  * puthex4 .. print 4 digit hex
  * IN: %d0
@@ -429,6 +474,7 @@ bl:
 /* do_typeb_sub:
  * IN: %a0 ... addr
  */
+    .global typeb_sub
 typeb_sub:
     move.l  (%d0),-(%a7)
 typeb_sub1:
@@ -495,7 +541,29 @@ do_cexit:
     move.w  (%a7)+,%a5
     move.w  (%a7)+,%a4
     bra.b   do_next
+/* branch */
+    .global do_bne
+do_bne:
+    move.w  (%a5)+,%d0
+    and.w   %d0,%d0
+    beq     do_bra1
+    .global do_bra
+do_bra:
+    add.w   (%a6)+,%a6
+do_bra1:
+    add.w   #2,%a6
+    bra.w   do_next
 
+    .global true_str
+true_str:
+    dc.b    4
+    .ascii  "true"
+    .align  2
+    .global false_str
+false_str:
+    dc.b    5
+    .ascii  "false"
+    .align  2
 /*
  * accept: line input (aka gets)
  * In:  %a0:  *buf
