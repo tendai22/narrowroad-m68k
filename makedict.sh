@@ -63,7 +63,12 @@ BEGIN {
             continue
         }
         if (flag == 1) {
-            if (s ~ /^[a-zA-Z][a-zA-Z0-9]*/) {
+            if (s ~ /^#/) {
+                # string
+                print "/* str = " s " */"
+                ss = substr(s, 2)
+                s = "dc.w    " ss;
+            } else if (s ~ /^[a-zA-Z][a-zA-Z0-9]*/) {
                 s = "dc.w    do_" s;
             } else {
                 s = "dc.w    " s;
