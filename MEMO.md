@@ -187,11 +187,151 @@ run...]1 2 + .
 
 * `At 133a: move.b D0, (A1,D1.l)`の件、accept入り口でD1(バッファ長)の値がおかしい。FFFE0080になっていた。
 * 呼び出し側で%d1への定数セットで`move.w`を使っていたので上16ビットが初期化されていなかった。`move.l`にして問題なくなった。
-* move.wで上が初期化されていない、move.bでビット8-15が初期化されていないという失敗が多い。うーんどう防止するべきか。 
+* move.wで上が初期化されていない、move.bでビット8-15が初期化されていないという失敗が多い。とりあえず気を付けるとして、それ以上の防止策はどうする？ 
 
 * 上記を修正後、`pop`でプロンプトに帰ってこない。
 * acceptからは帰ってきている。
 * findの終わりにブレークポイント掛けると、何度も辞書検索している。
 * 2度目のfindから、%a0(wordbuf)の指定が違っている。違うバッファからワードを見て検索していた。
 * outer ループでコマンド実行後に行入力ループに戻る際に、レジスタのpopができていなかった。pop3個を追加すると動くようになった。
+
+### バグかも？(11/28)
+
+```
+run...]16 base !
+]base !
+underflow]A base !
+
+A not found
+]base
+
+ 3400 ]@
+
+ 0000 ].
+Attempted to write 0000 to RAM address 00fffffe
+At 02d6: move.l  D4, -(A3)
+kuma@PC-C2387:~/narrowroad-m68k$
+```
+もう1回、今度はいきなり`base !`でアンダーフローを起こしてみる。
+```
+;
+run...]base !
+underflow]base
+3400 ]@
+0000 ].
+]
+```
+変数`base`が0になっているらしい。
+
+数値を表示`.`する際には`base`で割るため、ゼロ除算が生じているはず。現状、このエクセプションはキャッチしていないため、何が起こるかわからない状態。
+
+* そもそも`!`でアンダーフローを起こした場合書き込みされているのが問題か？
+* `!`の実行時に毎回スタックアンダーフローチェックするのはよろしくない。実行効率低下が心配だ。アウターループに戻ってくる際にチェックする、でいいはず。
+* `base`を参照するときにゼロかどうかをチェックするか。これも微妙だが。
+
+* いずれにしても、ゼロ除算のエクセプションは、バスエラーエクセプションとともに組み込んでおくべきですね。これらのエクセプションが生じると、スタックをクリアしてouter loop 先頭に戻る。
+
+### IF/ELSE/THENとループ導入: 仮想命令(ブランチ)の追加
+
+ワードコンパイル導入に先立ち、必要なワードを追加してゆく。ワードリストの要素は、通常実行ルーチンのアドレス(ジャンプ先)だが、「そのワードを取り出してそこへジャンプする」以外の処理が必要になる。ここではその「命令」3つを挙げる。
+
+* `lit`: リテラル、次のワードの値をスタックに積む。数値をコンパイルするとき生成されるコードに埋め込む。
+* `bra`, `bne`: 無条件ブランチと条件付きブランチ。
+* `bne`はスタックの値がfalseの時にジャンプする。`IF/ELSE/THEN`で、true節とfalse節の飛び越えに用いる。ワードIFのコンパイルの際に、`bne`をtrue節の前に置き、あとでELSE/THENに出会ったときにその位置へのジャンプ(IPにそのアドレスをセット)する。
+* `bra`はtrue節の最後に置き、あとでfalse節の最後のアドレスが確定した時点でここにジャンプ先を置く。
+* ループを組むときにも用いる。
+* 条件ワード: 比較演算子の類、スタックの上2ワードに適用する2項演算子。true(1)/false(0)をスタックに置く。`0=`, `0<`, `<`, `>`, 
+
+プログラマが打ち込むプログラムでは使わない。辞書エントリとしては存在しないが、終了時 next/exitにジャンプする。
+
+### リターンスタックは Moore74に記述がある。
+
+リターンスタックは Moore74に記述がある。よって、我々の narrowroad Forth インタプリタも2スタックで行く。
+
+### Moore_74に挙げられた基本ワード
+
+これから以下のワードを実装することになる。進捗確認も込めて。
+
+'l', 'm', and 'n' indicate numbers on the stack; 'a' indicates an address on the stack
+
+Words concerned with the dictionary:
+
+|||
+|--|--|
+|HERE|Address of next available word. 
+|LAST                             @|Address of last entry. 
+|WHERE|Type name of last entry. 
+|n ,|Compile number into dictionary. 
+|VOCABULARY word|Define the name of a vocabulary.
+|FORGET word|Forget all entries following 'word". 
+|n DP + !|Leave n locations for an array.
+|||
+
+Words concerned with the stack:
+
+|||
+|--|--|
+|l m n DUP|Leave l m n n on the stack 
+|" OVER|Leave l m n m on the stack 
+|" DROP|Leave l m on the stack 
+|" SWAP |Leave l n m on the stack 
+|" ROT|Leave m n 1 on the stack
+|n .|Type (and discard) number. 
+|a ?|Type number at address a.
+|a COUNT|Fetch the count field of a string.
+|a n TYPE|Type n characters, starting at address a.
+|||
+
+Words concerned with arithmetic:
+
+|||
+|--|--|
+|n CONSTANT word|Define 'word' so that its value (n) is placed onto the stack.
+|n INTEGER word|Define 'word' so that the address of its parameter field is placed onto the stack.
+|n a SET word|Define 'word' to store the number into the address.
+|a @|Fetch the number from address a.
+|n a !|Store the number into address a.
+|n a +!|Add the number into address a.
+|DECIMAL|Specify number base.
+|OCTAL|Specify number base.
+|HEX|Specify number base.
+|n MINUS|Leaven -n on the stack
+|n ABS|Leave |n| on the stack 
+|m n +|Leave m+n on the stack
+|m n \*|Leave m\*n on the stack 
+|m n MAX|Leave max (m, n) on the stack
+|m n MIN|Leave min (m, n) on the stack 
+|m n -|Leave m-n on the stack 
+|m n /|Leave m/n on the stack 
+|m n MOD|Leave m mod n on the stack 
+|l m n \*/|Leave l \* m / n on the stack 
+|n 0=|Leave if n=0 then 1; otherwise 0. 
+|n 0<|Leave n < 0 then 1; otherwise 0. 
+|m n \<|Leave m\< n then 1; otherwise 0. 
+|m n >|Leave m > n then 1; otherwise 0.
+|||
+
+Words concerned with the interpreter:
+
+|||
+|--|--|
+|WORD|Read the next word in the input string.
+|QUESTION|Type an error message-the last word read followed by? 
+|n LOAD|Read text from block n.
+|;S|End of text.
+|IMMEDIATE |Set the precedence of the last entry to 1.
+|: word|Define 'word' and begin compiling its definition.
+|I|Put the current value of the loop index on the stack.
+||(the following have precedence 1)
+|n IF|Skip to ELSE (or THEN) if number is 0 (false).
+|ELSE|Skip to THEN.
+|THEN|Mark end of skip.
+|m n DO |Begin loop; limit (m) and index (n) are placed on the return stack at execute time.
+|LOOP|End loop; increment index by 1 and stop at limit.
+|n +LOOP|End loop; increment index by n and stop at limit.
+||(the following have precedence 2)
+|;|End compilation.
+|;CODE|End compilation and begin assembling code.
+| EOT|End of input message from terminal. Await input and continue compilation.
+|||
 
