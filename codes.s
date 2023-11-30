@@ -476,7 +476,7 @@ bl:
  */
     .global typeb_sub
 typeb_sub:
-    move.l  (%d0),-(%a7)
+    move.l  %d0,-(%a7)
 typeb_sub1:
     move.b  (%a0)+,%d0
     jsr     (putch)
@@ -510,7 +510,10 @@ do_exit:
     jmp     (%a0)
     .global do_next
 do_next:
-    move.w  (%a6),%a0             /* 3 instructions equivalent to jmp  (%a6)+ */
+    move.w  (%a6),%d0           /* 3 instructions equivalent to jmp  (%a6)+ */
+    and.w   #0x3fff,%d0         /* clear precedence info */
+    move.w  %d0,%a0
+    jsr     (dump_entry)        /* for debugging */
     add.w   #2,%a6
     jmp     (%a0)               /* exec next token */
 
@@ -546,12 +549,13 @@ do_cexit:
 do_bne:
     move.w  (%a5)+,%d0
     and.w   %d0,%d0
-    beq     do_bra1
+    bne.w   do_bra
+    add.w   #2,%a6
+    bra.w   do_next
+
     .global do_bra
 do_bra:
     add.w   (%a6)+,%a6
-do_bra1:
-    add.w   #2,%a6
     bra.w   do_next
 
     .global true_str
@@ -883,5 +887,36 @@ find1:
     rts
 sample:
     jmp     do_list
+/*
+ * dump_entry ... debugging entry dump
+ * IN: %a0 ... CFA in the entry
+ */
+dump_entry:
+    move.l  %a0,-(%a7)
+    move.w  %a6,%d0
+    jsr     (puthex4)
+    jsr     (bl)
+    move.w  %a0,%d0
+    jsr     (puthex4)
+    jsr     (crlf)
+    move.l  (%a7)+,%a0
+    rts
+
+    add.l   #-2,%a0     /* end of string entry */
+dump_entry1:
+    move.w  -(%a0),%d0
+    and.w   #0xe000,%d0
+    bne     dump_entry1
+    /* got it */
+    move.w  %a0,%d0
+    jsr     (puthex4)
+    jsr     (bl)
+    move.w  %a6,%d0
+    jsr     (puthex4)
+    jsr     (bl)
+    jsr     (typeb_sub)     /* type entry name string */
+    jsr     (crlf)
+    move.l  (%a7)+,%d0
+    rts
 
 

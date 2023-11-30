@@ -17,7 +17,9 @@ cat <<EOF
     .section DICT
 dict:
     dc.w   dict
+here_addr:
     dc.w   entry_end
+last_addr:
     dc.w   entry_head
 EOF
 # dict definitions

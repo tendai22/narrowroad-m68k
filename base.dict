@@ -3,6 +3,9 @@
 #
 
     org 0
+/*
+ * test entries
+ */
 word abc
     lit
     1
@@ -23,16 +26,48 @@ word test
     endword
 code add
     jmp  do_plus
-code pop
+    
+word nop
+    endword
+
+/*
+ * primitive words
+ */
+code dup 
+    move.w  (%a5),-(%a5)
+    endcode
+code over
+    move.w  +2(%a5),-(%a5)
+    endcode
+code drop
     add.w   #2,%a5
     endcode
+code swap
+    move.w  (%a5)+,%d0
+    move.w  (%a5)+,%d1
+    move.w  %d0,-(%a5)
+    move.w  %d1,-(%a5)
+    endcode
+code rot
+    move.w  (%a5)+,%d0  /* n */
+    move.w  (%a5)+,%d1  /* m */
+    move.w  (%a5)+,%d2  /* l */
+    move.w  %d1,-(%a5)
+    move.w  %d0,-(%a5)
+    move.w  %d2,-(%a5)
+    endcode
+
+/*
+ * binary operators
+ */
 code + plus
     move.w  (%a5)+,%d0
     add.w   (%a5)+,%d0
     move.w  %d0,-(%a5)
     endcode
-word nop
-    endword
+/*
+ * print words
+ */
 code . period
     move.w  (%a5)+,%d0
     jsr     (do_putnum)
@@ -47,6 +82,19 @@ code bl
     move.b  #' ',%d0
     jsr     (putch)
     endcode
+
+code typeb
+    move.w  (%a5)+,%a0
+    jsr     (typeb_sub)
+    endcode
+code types
+    move.w  (%a5)+,%a0
+    jsr     (putstr)
+    endcode
+
+/*
+ * memory access
+ */
 code @ atfetch
     move.w  (%a5),%a0
     move.w  (%a0),%d0
@@ -68,31 +116,55 @@ code C! bytedeposite
     move.w  (%a5)+,%d0
     move.b  %d0,(%a0)
     endcode
+
+/*
+ * base ... number/period base number
+ */
 code base
     move.w  #__base,-(%a5)
     endcode
-code typeb
-    move.w  (%a5)+,%a0
-    jsr     (typeb_sub)
+
+/*
+ * here ... push next to end-of-the-last entry
+ */
+code here
+    move.w  (here_addr),-(%a5)
     endcode
-code types
-    move.w  (%a5)+,%a0
-    jsr     (putstr)
+/*
+ * last ... push the address of the last entry
+ */
+code last
+    move.w  #last_addr,-(%a5)
     endcode
+/*
+ * where ... type name of last entry
+ */
+word where
+    last
+    atfetch
+    types
+    endword
+
+/*
+ * test words again
+ */
+word branch
+    bne
+    12
+    lit
+    #false_str
+    types
+    cr
+    bra
+    8
+    lit
+    #true_str
+    types
+    cr
+    endword
 word ttest
     lit
     #true_str
     types
     endword
 
-
-word branch
-    bne
-    8
-    #true_str
-    types
-    bra
-    4
-    #false_str
-    types
-    endword
