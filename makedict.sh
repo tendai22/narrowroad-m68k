@@ -28,13 +28,17 @@ BEGIN {
     nels = 0;
     prev_link = "0"
 }
+{
+    # uncomment
+    sub(/[  ]*\/\/.*$/, "", $0);
+}
 /^word/ || /^code/{
     str = name = $2
     if (NF > 2) {
         name = $3
     }
     n = length(str);
-    #print n, str
+    print "/* ", $1, " ", n, str, " */"
     body = ""
     i = 0;
     
@@ -49,7 +53,7 @@ BEGIN {
     }
     printf "entry_%03d:\n", nels;
     printf "e_%s:\n", name
-    printf "    dc.b    %d\n", n
+    printf "    dc.b    %d\n", n + 128
     printf "    .ascii  \"%s\"\n", str
     printf "    .align  2\n"
     printf "    dc.w    %s\n", prev_link
@@ -69,14 +73,18 @@ BEGIN {
                 # string
                 print "/* str = " s " */"
                 ss = substr(s, 2)
-                s = "dc.w    " ss;
+                s = "    dc.w    " ss;
             } else if (s ~ /^[a-zA-Z][a-zA-Z0-9]*/) {
-                s = "dc.w    do_" s;
+                s = "    dc.w    do_" s;
             } else {
-                s = "dc.w    " s;
+                s = "    dc.w    " s;
+            }
+        } else {
+            if (s !~ /:$/) {
+                s = "    " s
             }
         }
-        print "    " s
+        print s
     }
     if (flag == 1) {
         print "    dc.w    do_exit"

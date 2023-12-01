@@ -513,7 +513,7 @@ do_next:
     move.w  (%a6),%d0           /* 3 instructions equivalent to jmp  (%a6)+ */
     and.w   #0x3fff,%d0         /* clear precedence info */
     move.w  %d0,%a0
-    jsr     (dump_entry)        /* for debugging */
+    /* jsr     (dump_entry)*/        /* for debugging */
     add.w   #2,%a6
     jmp     (%a0)               /* exec next token */
 
@@ -833,12 +833,19 @@ do_same:
     move.w  %a0,-(%a7)
 do_same0:
     move.b  (%a0),%d0
-    and.w   #255,%d0
+    and.w   #0x1f,%d0       /* upper 3bit ignored in comparison */
     add.b   #2,%d0
     lsr     #1,%d0          /* (%d0 + 2) / 2 */
+    /* first word comparison */
+    move.w  (%a0)+,%d1
+    sub.w   (%a1)+,%d1
+    and.w   #0x1fff,%d1
+    bne     do_same1        /* exit with Non-Zero */
+    add.b   #-1,%d0
+    beq     do_same1
 do_same2:
     move.w  (%a0)+,%d1
-    cmp.w   (%a1)+,%d1
+    sub.w   (%a1)+,%d1
     bne     do_same1        /* exit with Non-Zero */
     add.b   #-1,%d0
     bne     do_same2        /* loop to next char */
@@ -865,6 +872,7 @@ find0:
     /* get the next entry top */
     eor.w   #0,%d0         /* clear D0 wordly */
     move.b  (%a1),%d0
+    and.b   #0x1f,%d0
     add.b   #2,%d0
     lsr     #1,%d0
     add.w   %d0,%d0     /* word offset to byte offset */
@@ -877,7 +885,7 @@ find0:
 find1:
     move.w  %a1,%a0
     move.b  (%a0),%d0
-    and.w   #255,%d0
+    and.w   #0x1f,%d0
     lsr     #1,%d0
     add.b   #1,%d0
     lsl     #1,%d0
@@ -901,22 +909,4 @@ dump_entry:
     jsr     (crlf)
     move.l  (%a7)+,%a0
     rts
-
-    add.l   #-2,%a0     /* end of string entry */
-dump_entry1:
-    move.w  -(%a0),%d0
-    and.w   #0xe000,%d0
-    bne     dump_entry1
-    /* got it */
-    move.w  %a0,%d0
-    jsr     (puthex4)
-    jsr     (bl)
-    move.w  %a6,%d0
-    jsr     (puthex4)
-    jsr     (bl)
-    jsr     (typeb_sub)     /* type entry name string */
-    jsr     (crlf)
-    move.l  (%a7)+,%d0
-    rts
-
 

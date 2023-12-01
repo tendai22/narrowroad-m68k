@@ -64,7 +64,7 @@ static char get_byte(word_t i)
 
 static word_t prev_entry(word_t wp)
 {
-    int n = get_byte(wp);
+    int n = get_byte(wp) & 0x1f;
     word_t w;
     n = (n + 2) / 2;    // word length
     /*fprintf(stderr, "%04X+2*%d\n", wp, n);*/
@@ -77,7 +77,7 @@ static void dump_entry(word_t begin, int size)
     int index = 0, i, nstr;
     //fprintf(stderr, "(%x,%x)\n", begin, begin + size);
     // parse string
-    nstr = get_byte(begin + index);
+    nstr = get_byte(begin + index) & 0x1f;
     index++;
     printf("%04X    %d,\"", begin, nstr);
     for (i = 0; i < nstr; ++i) {

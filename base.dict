@@ -143,11 +143,67 @@ code last
  * where ... type name of last entry
  */
 word where
-    last
-    atfetch
-    types
+    last        // 最終辞書エントリの先頭アドレス
+    atfetch     // を取り出しスタックに乗せる
+    dup
+    lit
+    1
+    add         // アドレスを1足して文字列先頭を指す
+                // ようにする。
+    swap        // それをプッシュして
+    bytefetch   // 文字数カウンタを取り出し
+    lit
+    31          
+    and         // 0x1fでANDする(上3ビットをクリアする)
+    type0       // これでスタックトップが(addr n)になった
+                // のでtype0を呼び出す
     endword
 
+/*
+ * logical binary operators
+ */
+
+code and
+    move.w  (%a5)+,%d0
+    and.w   %d0,(%a5)
+    endcode
+code or
+    move.w  (%a5)+,%d0
+    or.w   %d0,(%a5)
+    endcode
+code xor
+    move.w  (%a5)+,%d0
+    eor.w   %d0,(%a5)
+    endcode
+/*
+ * not ... logical inversion, not 0 if 0, 0 if not 0
+ */
+
+code not
+    move.w  (%a5),%d0
+    and.w   %d0,%d0
+    beq     xcode_1
+    move.w   #-1,%d0
+xcode_1:
+    add.w   #1,%d0
+    move.w  %d0,(%a5)
+    endcode
+
+/*
+ * type0 (addr n -- )
+ */
+code type0
+    move.w  (%a5)+,%d1
+    move.w  (%a5)+,%a0
+    cmp.b   #0,%d1
+type0_1:
+    beq     type0_2
+    move.b  (%a0)+,%d0
+    jsr     (putch)
+    add.b   #-1,%d1
+    bra.b   type0_1
+type0_2:
+    endcode
 /*
  * test words again
  */
