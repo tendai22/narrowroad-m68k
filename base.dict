@@ -78,9 +78,12 @@ code cr
     move.b  #10,%d0
     jsr     (putch)
     endcode
-code bl
+code space
     move.b  #' ',%d0
     jsr     (putch)
+    endcode
+code bl
+    move.w  #' ',-(%a5)
     endcode
 
 code typeb
