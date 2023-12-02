@@ -67,7 +67,7 @@ static word_t prev_entry(word_t wp)
     int n = get_byte(wp) & 0x1f;
     word_t w;
     n = (n + 2) / 2;    // word length
-    /*fprintf(stderr, "%04X+2*%d\n", wp, n);*/
+    fprintf(stderr, "%04X+2*%d\n", wp, n);
     w = get_word(wp + 2 * n);
     return w;
 }
@@ -96,10 +96,14 @@ static void dump_entry(word_t begin, int size)
 
 int main(int ac, char **av)
 {
+    FILE  *fp;
     int c, len;
     word_t w;
     unsigned char *p = &buf[0];
-    while (p < &buf[4096] && ((c = readchar(stdin)) != EOF))
+    if (!(ac > 1 && (fp = fopen(av[1], "r")))) {
+        fprintf(stderr, "usage %s <file-name>\n", av[0]);
+    }
+    while (p < &buf[4096] && ((c = readchar(fp)) != EOF))
         *p++ = c;
     // get header addresses
     len = p - &buf[0];
@@ -124,7 +128,7 @@ int main(int ac, char **av)
     word_t wp = head;
     entries[0] = end;
     for (i = 1; base <= wp && i < MAXENTRY; ++i) {
-        /*fprintf(stderr, "%04X:\n", wp);*/
+        fprintf(stderr, "%04X:\n", wp);
         entries[i] = wp;
         wp = prev_entry(wp);
     }

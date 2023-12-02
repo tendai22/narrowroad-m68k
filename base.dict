@@ -4,33 +4,6 @@
 
     org 0
 /*
- * test entries
- */
-word abc
-    lit
-    1
-    lit
-    50
-    add
-    endword
-code defgh
-    mov.w  #1,-(%a5)        /* a5 is DSP */
-    mov.w  #2,-(%a5)
-    mov.w  (%a5)+,%d0
-    add.w  (%a5)+,%d0
-    mov.w  %d0,-(%a5)
-    endcode
-word test
-    nop
-    abc
-    endword
-code add
-    jmp  do_plus
-    
-word nop
-    endword
-
-/*
  * primitive words
  */
 code dup 
@@ -57,44 +30,102 @@ code rot
     move.w  %d2,-(%a5)
     endcode
 
-/*
- * binary operators
- */
-code + plus
+// -----------------------
+// binary operators
+//
+code + add
     move.w  (%a5)+,%d0
-    add.w   (%a5)+,%d0
-    move.w  %d0,-(%a5)
+    add.w   %d0,(%a5)
     endcode
-/*
- * print words
- */
+
+code - sub
+    move.w  (%a5)+,%d0
+    sub.w   %d0,(%a5)
+    endcode
+
+code * mul
+    move.w  (%a5)+,%d0
+    muls.w  (%a5),%d0
+    move.w  %d0,(%a5)
+    endcode
+
+code / div
+    move.w  (%a5)+,%d0
+    move.w  (%a5),%d1
+    and.w   %d1,%d1
+    bpl     div_1
+    or.l    #0xffff0000,%d1
+div_1:
+    divs.w  %d0,%d1
+    move.w  %d1,(%a5)
+    endcode
+code lsr
+    move.w  (%a5),%d0
+    lsr.w   #1,%d0
+    move.w  %d0,(%a5)
+    endcode
+
+// -------------------------------
+// print words
+// -------------------------------
+//
+// .(period) (n -- )... print a number
+//
 code . period
     move.w  (%a5)+,%d0
     jsr     (do_putnum)
     endcode
+//
+// cr ... print crlf
+//
 code cr
     move.b  #13,%d0
     jsr     (putch)
     move.b  #10,%d0
     jsr     (putch)
     endcode
+//
+// space ... print a space char
+//
 code space
     move.b  #' ',%d0
     jsr     (putch)
     endcode
+//
+// bl ( -- #' ') put a space char on the stack
+//
 code bl
     move.w  #' ',-(%a5)
     endcode
-
+//
+// typeb (addr --) ... print a word string, till a space encounters
+//
 code typeb
     move.w  (%a5)+,%a0
     jsr     (typeb_sub)
     endcode
+//
+// types (addr --)
+//
 code types
     move.w  (%a5)+,%a0
     jsr     (putstr)
     endcode
-
+/*
+ * type0 (addr n -- )
+ */
+code type0
+    move.w  (%a5)+,%d1
+    move.w  (%a5)+,%a0
+    cmp.b   #0,%d1
+type0_1:
+    beq     type0_2
+    move.b  (%a0)+,%d0
+    jsr     (putch)
+    add.b   #-1,%d1
+    bra.b   type0_1
+type0_2:
+    endcode
 /*
  * memory access
  */
@@ -103,7 +134,7 @@ code @ atfetch
     move.w  (%a0),%d0
     move.w  %d0,(%a5)
     endcode
-code C@ bytefetch
+code c@ bytefetch
     move.w  (%a5),%a0
     move.b  (%a0),%d0
     and.w   #255,%d0
@@ -114,7 +145,7 @@ code ! exclamation
     move.w  (%a5)+,%d0
     move.w  %d0,(%a0)
     endcode
-code C! bytedeposite
+code c! bytedeposite
     move.w  (%a5)+,%a0
     move.w  (%a5)+,%d0
     move.b  %d0,(%a0)
@@ -127,21 +158,25 @@ code base
     move.w  #__base,-(%a5)
     endcode
 
-/*
- * here ... push next to end-of-the-last entry
- */
-code here
-    move.w  (here_addr),-(%a5)
-    endcode
-/*
- * last ... push the address of the last entry
- */
+//
+// dictonary words
+//
+
+//
+// here ... push next to end-of-the-last entry
+//
+//code here
+//    move.w  (here_addr),-(%a5)
+//    endcode
+//
+// last ... push the address of the last entry
+//
 code last
     move.w  #last_addr,-(%a5)
     endcode
-/*
- * where ... type name of last entry
- */
+//
+// where ... type name of last entry
+//
 word where
     last        // 最終辞書エントリの先頭アドレス
     atfetch     // を取り出しスタックに乗せる
@@ -158,6 +193,32 @@ word where
     type0       // これでスタックトップが(addr n)になった
                 // のでtype0を呼び出す
     endword
+//
+// h
+//
+word h 
+    lit #here_addr
+    endword
+//
+// here ... same as `h @`
+//
+word here
+    lit #here_addr
+    atfetch
+    endword
+//
+// allot ... advance dict-tail pointer
+//   (n allot --)
+word allot
+    lit #here_addr
+    dup
+    atfetch
+    rot
+    add         // here n plut
+    swap        // (addr value -- )
+    exclamation // store it
+    endword
+
 
 /*
  * logical binary operators
@@ -189,41 +250,111 @@ xcode_1:
     move.w  %d0,(%a5)
     endcode
 
-/*
- * type0 (addr n -- )
- */
-code type0
-    move.w  (%a5)+,%d1
-    move.w  (%a5)+,%a0
-    cmp.b   #0,%d1
-type0_1:
-    beq     type0_2
-    move.b  (%a0)+,%d0
-    jsr     (putch)
-    add.b   #-1,%d1
-    bra.b   type0_1
-type0_2:
+code emit
+    move.w  (%a5)+,%d0
+    jsr    (putch)
     endcode
+//
+// compilers
+//
+code in> in_stream
+    jsr     (getchar)
+    move.w  %d0,-(%a5)
+    endcode
+//
+// word ... read a word from input stream and
+//          put it to the end-of-dictionary
+//      (c -- addr)
+//
+code word
+    move.w  (%a5)+,%d1      // delimit .. %d1
+    move.w  (here_addr),%d0
+    and.l   #0xffff,%d0
+    move.l  %d0,%a1         // %a1, here + 1(string start point)
+    move.l  %a1,-(%a7)      // push %a1
+    add.l   #1,%a1          // start point is here + 1
+    move.w  #31,%d2         // %d2, destination max size
+    and.b   %d2,%d2
+word_1:
+    beq     word_2
+    jsr     (getchar)       // buffered/block input
+    move.b  %d0,(%a1)+
+    cmp.b   %d1,%d0
+    beq     word_2
+    add.w   #-1,%d2
+    bra     word_1
+word_2:
+    cmp.b   -(%a1),%d1      // last char is delimiter?
+    beq     word_3
+    add.l   #1,%a1          // restore %a1
+word_3:
+    move.l  (%a7)+,%a0      // restore top-of-entry addr
+    move.l  %a1,%d0
+    sub.l   %a0,%d0         // end-addr - start-addr -> %d0
+    add.b   #-1,%D0         // dec 1 omiiting top one byte
+    move.b  %d0,(%a0)       // put n to top-of-the entry
+    move.w  %a0,-(%a5)
+    endcode
+
+//
+// create ... read a word from input stream and 
+//            put it to the end-of-dictionary
+//
+word create
+    // copy word name at the beginning of new entry
+    bl
+    word    // name string is copied.
+    dup
+    bytefetch
+    // get link offset
+    lsr     // n / 2
+    lit 1
+    add     // (n / 2 + 1)
+    dup
+    add     // (n / 2 + 1) * 2
+    // now we get the offset
+    dup
+    // 
+    here
+    add     // here + offset
+    last
+    atfetch
+    swap
+    exclamation // `last` value to be set to link field
+    // set MSB on top-of-entry(here)
+    here
+    dup
+    bytefetch     // get top-of-two bytes
+    lit 0x80
+    or
+    swap
+    bytedeposite
+    // link offset remains, H will be added with it
+    allot
+    endword
+
+word test2
+test2_1:
+    lit 0x61
+    emit
+    bra test2_1
+    endword
+
 /*
  * test words again
  */
 word branch
-    bne
-    12
-    lit
-    #false_str
-    types
-    cr
-    bra
-    8
-    lit
-    #true_str
+    bne  bra_1
+    lit  #false_str
+    bra  bra_2
+bra_1:
+    lit  #true_str
+bra_2:
     types
     cr
     endword
 word ttest
-    lit
-    #true_str
+    lit  #true_str
     types
     endword
 

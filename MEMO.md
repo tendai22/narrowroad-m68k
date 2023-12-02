@@ -667,8 +667,6 @@ word where
     endword
 ```
 
-
-
 ### 辞書エントリ生成をワードリストで書いてみよう
 
 "Starting Forth"にこのあたりのワードの説明があった。
@@ -800,8 +798,224 @@ makedict.sh:
 * //コメント対応(コメント部分を削除する)
 * codeエントリでラベルを使えるようにした
 
+### 12/2の差分
 
+base.dict:
+* テストエントリ削除、動作は安定し十分エントリ例が増えた。
+  辞書を整理してすっきりさせておきたい。
 
+### 四則演算子(12/2)
+
+* `+`, `-`, `*`は問題ない。
+* `/`は少し難しい。
+  * 被除数`%d1`は32ビットなので、符号付き16ビットの値を32ビットに符号拡張しないといけない。
+  * BFEXTS命令は68020以上でしか使えない。68000ではtest/braを使う。
+  * and命令で符号ビットNに反映される。bpl/bne条件付きブランチを使う。
+
+```
+code / div
+    move.w  (%a5)+,%d0
+    move.w  (%a5),%d1
+    and.w   %d1,%d1
+    bpl     div_1
+    or.l    #0xffff0000,%d1
+div_1:
+    divs.w  %d0,%d1
+    move.w  %d1,(%a5)
+    endcode
+```
+
+### 辞書エントリアセンブラを書こう(12/2)
+
+疑似命令 `lit`, `bra`, `bne`のオペランドを同じ行に掛けるようにした。
+また、`bra`, `bne` のオペランドとしてラベルを使えるようにした。 
+
+今までは、`bra`, `bne`のオペランドを行数を数えて手計算する必要があったが、これでアセンブリ言語風にラベル定義とオペランドにラベルを書くことでオペランドを計算してくれる。
+
+これで辞書エントリがアセンブリ言語風に掛けるようになった。
+
+```
+word branch
+    bne  bra_1
+    lit  #false_str
+    bra  bra_2
+bra_1:
+    lit  #true_str
+bra_2:
+    types
+    cr
+    endword
+```
+
+* makedict.sh により、辞書アセンブリファイル`base.dict`からアセンブリ言語ファイル`dict.s`が生成される。
+* `dict.s`をアセンブルし`dict.o`を生成する。これと、`codes.s`をアセンブルして得られるオブジェクトファイル`codes.o`をリンクし、`a.out`が生成される。
+* `a.out`内のオブジェクトコードを16進ダンプし、アップロード用形式`narrowroad.X`, ブレークポイントは`bp.X`ファイルに変換する。
+* `narrowroad.X`, `bp.X`をアップロード後runすればよい。
+
+### 辞書エントリのデバッグ手順
+
+### 辞書エントリ生成をワードリストで書いてみよう
+
+"Starting Forth"にこのあたりのワードの説明があった。
+
+#### `CREATE`: 辞書エントリの作成
+
+* 入力からワード1つを読み込み、そのワードを名前として持つエントリを作る。
+* エントリは辞書の末尾(`HERE`, 実際は変数`H`の値)に置く。名前文字列の後ろにリンク(`LAST`の値を取り出しリンクに入れる)
+* 辞書領域にデータを置く際には、`H @`(or `HERE`)で置き先のアドレスを得て、`ALLOT`で`H`を進めるという記法を用いる。
+
+という仕事を行うワードが`CREATE`である。スタック上にPFA(CFAの次のアドレス)を置く。
+
+narrowroad Forthインタプリタの場合、CFAが不定長なので、リストの場合のジャンプ命令を仮置きしておく(3ワード)。
+
+辞書領域にデータを置く際には、`H @`(or `HERE`)で置き先のアドレスを得て、`ALLOT`で`H`を進めるという記法を用いる。
+
+#### `PAD`: 文字列保持用のワークエリア
+
+"Starting Forth"では、HEREの34バイト先となっている。辞書エントリが増えるにつれ`PAD`も先に進む。Moore74にはそういう話がない。行入力バッファの末尾を使えばよいとされている。
+
+### `H`, `HERE`, `ALLOT`, `PAD`の定義
+
+`H @` が `HERE`に相当するということで。
+
+`H`: ( -- addr) 辞書末尾ポインタを格納する領域のアドレス。
+`HERE`: ( -- addr) 辞書末尾のアドレス
+`ALLOT`: (n -- ): 辞書末尾を進める。
+
+本実装では、辞書末尾は辞書先頭、ラベル`here_addr`に置いてある。
+
+* `h`は`here_addr`をスタックに置く
+* `here`は、`here_addr`番地の16ビット値をスタックに置く。
+* `allot`は`here_addr`番地の値にスタックトップの値を加算して格納する。
+
+```
+word h 
+    lit #here_addr
+    endword
+
+word here
+    lit #here_addr
+    atfetch
+    endword
+
+//   (n allot --)
+word allot
+    lit #here_addr
+    dup
+    atfetch
+    rot
+    add         // here n plut
+    swap        // (addr value -- )
+    exclamation // store it
+    endword
+```
+
+### 辞書エントリの作成: Part1 `CREATE`
+
+* 入力からワード1つを読み込み、そのワードを名前として持つエントリを作る。
+* エントリは辞書の末尾(`HERE`, 実際は変数`H`の値)に置く。名前文字列の後ろにリンク(`LAST`の値を取り出しリンクに入れる)
+* 辞書領域にデータを置く際には、`H @`(or `HERE`)で置き先のアドレスを得て、`ALLOT`で`H`を進めるという記法を用いる。
+
+まず、WORDを作る。
+
+#### WORD (c -- adr)
+
+> 文字(通常は空白)を区切り文字として、入力ストリームから 1 つのワードを読み取る。文字列を 1 バイト目にカウントを入れたアドレス(HERE)に移動し、そのアドレスをスタックに残します
+
+wordは辞書末尾に文字列をコピーしてくれるが、これはそのまま新しいエントリのヘッダとして使える。辞書にcodeエントリとして作成した。
+
+```
+//
+// word ... read a word from input stream and
+//          put it to the end-of-dictionary
+//      (c -- addr)
+//
+code word
+    move.w  (%a5)+,%d1      // delimit .. %d1
+    move.w  (here_addr),%d0
+    and.l   #0xffff,%d0
+    move.l  %d0,%a1         // %a1, here + 1(string start point)
+    move.l  %a1,-(%a7)      // push %a1
+    add.l   #1,%a1          // start point is here + 1
+    move.w  #31,%d2         // %d2, destination max size
+    and.b   %d2,%d2
+word_1:
+    beq     word_2
+    jsr     (getchar)       // buffered/block input
+    move.b  %d0,(%a1)+
+    cmp.b   %d1,%d0
+    beq     word_2
+    add.w   #-1,%d2
+    bra     word_1
+word_2:
+    cmp.b   -(%a1),%d1      // last char is delimiter?
+    beq     word_3
+    add.l   #1,%a1          // restore %a1
+word_3:
+    move.l  (%a7)+,%a0      // restore top-of-entry addr
+    move.l  %a1,%d0
+    sub.l   %a0,%d0         // end-addr - start-addr -> %d0
+    add.b   #-1,%D0         // dec 1 omiiting top one byte
+    move.b  %d0,(%a0)       // put n to top-of-the entry
+    move.w  %a0,-(%a5)
+    endcode
+```
+
+辞書末尾をバッファとして使うというアイディアは思いつかなかった。独立な場所を確保するのが今風なのだが、デフォルトで語の定義にそのまま利用できる場所で、かつ他に移動させるにも問題ない場所、また通常の実行には問題にならない場所という、これ以上はないという好適な場所といえるだろう。
+
+#### `CREATE`
+
+* エントリは辞書の末尾(`HERE`, 実際は変数`H`の値)に置く。名前文字列の後ろにリンク(`LAST`の値を取り出しリンクに入れる)
+* 辞書領域にデータを置く際には、`H @`(or `HERE`)で置き先のアドレスを得て、`ALLOT`で`H`を進めるという記法を用いる。
+
+* `WORD`を呼び出し辞書末尾に名前文字列を置く
+* リンク置き場所を算出して、`LAST`の値を入れる。
+* `ALLOT`で`H`を進める。
+* 先頭バイトのMSBを立てる。
+
+|length(n)|n / 2|n / 2 + 1|link offset|
+|:--:|:--:|:--:|:--:|
+|1|0|1|2|
+|2|1|2|4|
+|3|1|2|4|
+|4|2|3|6|
+|5|3|3|6|
+
+```
+link_offset = (n / 2 + 1) * 2
+```
+
+だいたい動いたところで時間切れ。lastが変数アドレスを載せるだけというのに気づいて直したところで動作未確認。
+
+あと、`Musashi`が印字途中でハングする件のデバッグが必要。
+
+#### 12/2修正の概要
+
+base.dict:
+
+* 2項演算子追加: `+`, `-`, `*`, `/`, `lsr`(1ビット右シフト)
+  + divは被除数を32bit化(符号拡張)しておく必要がある。さもなくば、除数または被除数が負数の場合おかしなことが起きる。
+* `type0` (addr n --)の追加
+* C@ -> c@, C! -> c!
+* `here`を辞書定義に変えた(codes.s 側はコメントアウト)
+* `allot`, `emit`
+* `word` (c -- addr)の追加。辞書末尾に文字列を置き、そのアドレスを返す
+* `create`作成中
+
+* word定義で、`lit`, `bra`, `bne`にオペランド形式で書けるようにした。
+* word定義で、ラベルを使えるようにした。`bra`, `bne`のオペランドもアセンブル時に自動計算されるようになった。
+
+codes.s:
+
+getchar: ストリームバッファ上に構成する1文字読み込み。バッファが隠ぺいされている。将来の入力リダイレクトの布石でもある。`word`実装の際に使用している。
+
+do_word -> do_word_asm: アセンブリ言語版の`do_word`の名前バッティングを回避。将来的に outer interpreterがword定義化された際には使用されなくなる。
+
+bl, spaceの定義を好感した。blはスタックに空白文字を置く。spaceは空白文字を印字する。
+
+dump_stack, dump_entry: ワード実行中のトレース表示。シングルステップにまではできていない。
+
+makedict.sh: lit, bra, bneのオペランド記述、ラベル算出対応。
 
 ### 付録. Moore_74に挙げられた基本ワード
 

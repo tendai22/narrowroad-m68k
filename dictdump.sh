@@ -43,7 +43,7 @@ awk '{ printf "table[\"%s\"] = \"%s\"\n", $1, $2; }' > a.symbols
 # generate final shell script, and ...
 #
 ( cat <<"EOF"
-./dictdump 2>/dev/null < a.dict |
+./dictdump 2>/dev/null a.dict |
 awk 'BEGIN {
 EOF
 cat a.symbols

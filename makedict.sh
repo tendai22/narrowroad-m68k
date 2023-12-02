@@ -32,28 +32,28 @@ BEGIN {
     # uncomment
     sub(/[  ]*\/\/.*$/, "", $0);
 }
-/^word/ || /^code/{
+/^word / || /^code /{
+    mode = $1
     str = name = $2
     if (NF > 2) {
         name = $3
     }
-    n = length(str);
-    print "/* ", $1, " ", n, str, " */"
+    len = length(str);
     body = ""
-    i = 0;
-    
+    #len = 0;
     next;
 }
 /endword/ || /endcode/ {
     flag = ($0 ~ /word/);
-    x = n % 2
-    printf "/* n = %d, n % 2 == %d */\n", n, x 
-    if (n % 2 == 0) {
+    x = len % 2
+    #printf "/* len = %d, len % 2 == %d */\n", len, x 
+    if (len % 2 == 0) {
         str = str " "
     }
+    print ""
     printf "entry_%03d:\n", nels;
     printf "e_%s:\n", name
-    printf "    dc.b    %d\n", n + 128
+    printf "    dc.b    %d\n", len + 128
     printf "    .ascii  \"%s\"\n", str
     printf "    .align  2\n"
     printf "    dc.w    %s\n", prev_link
@@ -64,25 +64,28 @@ BEGIN {
     # print body
     n = split(body, a, /\|/)
     for (i in a) {
-        s = a[i];
-        if (s ~ /^$/) {
+        w = a[i];
+        if (w ~ /^$/) {
             continue
         }
-        if (flag == 1) {
-            if (s ~ /^#/) {
-                # string
-                print "/* str = " s " */"
-                ss = substr(s, 2)
-                s = "    dc.w    " ss;
-            } else if (s ~ /^[a-zA-Z][a-zA-Z0-9]*/) {
-                s = "    dc.w    do_" s;
-            } else {
-                s = "    dc.w    " s;
-            }
-        } else {
+        if (mode ~ /^code/) {
+            print w
+            continue
+        }
+        s = w
+        if (s ~ /^#/) {
+            # string
+            #print "/* str = " s " */"
+            ss = substr(s, 2)
+            s = "    dc.w    " ss;
+        } else if (s ~ /^L_/) {
             if (s !~ /:$/) {
-                s = "    " s
+                s = "    dc.w    " s " - 2 - ."
             }
+        } else if (s ~ /^[a-zA-Z][a-zA-Z0-9]*/) {
+            s = "    dc.w    do_" s;
+        } else {
+            s = "    dc.w    " s;
         }
         print s
     }
@@ -96,13 +99,32 @@ BEGIN {
     next
 }
 {
-    sub(/^[     ][  ]*/, "", $0);
-    if ($0 ~ /^[   ][  ]*$/) {
+    s = $0
+    if (mode ~ /^code/) {
+        body = body "|" s;
         next
     }
-    body = body "|" $0;
+    sub(/^[     ][  ]*/, "", s);
+    if (s ~ /^[   ][  ]*$/) {
+        next
+    }
+    # split
+    if (s ~ /^lit[  ]/ || s ~ /^bra[  ]/ || s ~ /^bne[  ]/) {
+        n= split(s, b, /[     ]*/)
+        s = b[1]
+        ope = b[2]
+        if (s ~ /^bra$/ || s ~ /^bne$/) {
+            ope = "L_" ope
+        }
+        body = body "|" s "|" ope;
+    } else if (s ~ /:$/) {
+        body = body "|L_" s
+    } else { 
+        body = body "|" s;
+    }
 }
 END {
+    print ""
     print "entry_end:"
     printf "    .equ entry_head, entry_%03d\n", --nels
 }

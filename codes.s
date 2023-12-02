@@ -25,13 +25,23 @@ linbuf:
 linbufend:
 wordbuf:
     .space 128
+streambuf:
+    .space 128
 
     .section VARIABLE
     .global __base
 __base:
-    dc.w   10
+    dc.w    10
+/*
+ * linbuffer for getchar
+ */
+__bufp:
+    dc.w    0
+__bufn:
+    dc.w    0
 
     .section STACK
+    .org   0xfc00
 stack_bottom:
     .space 256
 dsp_end:
@@ -64,7 +74,7 @@ do_exception:
     move.l  #exception_str,%a0
 do_exception_message:
     jsr     (putstr)
-    jsr     (bl)
+    jsr     (space)
     add.l   #2,%a7
     move.l  (%a7),%a0         /* access address */
     move.l  %a0,%d0
@@ -109,7 +119,7 @@ outer1_1:
     /*
      * %d0, number of input char
      */
-    and.l   %d0,%d0
+    and.w   %d0,%d0
     beq     outer1               /* re getline */
 /*
  * do_number
@@ -130,17 +140,17 @@ outer4:
      */
     move.l  #wordbuf,%a1
     move.w  #32,%d2
-    jsr    (do_word)
+    jsr    (do_word_asm)
      * Out: %a0 .. next position in input string
      *     %a1 ... next position in destination buffer
      *     %d1 ... rest number of input characters (or zero)
      *     %d2 ... rest number of destination buffer
      *     %d0 ... result flag, return number of copied characters
      */
-    and.l    %d0,%d0
+    and.w    %d0,%d0
     bne      outer6
     /* no words gotten, check end-of-data? */
-    and.l    %d1,%d1
+    and.w    %d1,%d1
     beq      outer1  /* get next line */
     bra      outer3  /* process rest characters */
 outer6:
@@ -165,7 +175,7 @@ outer6:
      *      %a1 .. addr of CFR of found entry 
      */
     move.l   %a0,%d0
-    and.l    %d0,%d0
+    and.w    %d0,%d0
     beq      outer5
 do_exec:
     move.l   #next_addr,%a6     /* initialize IP (as return address) */
@@ -190,7 +200,7 @@ outer5:
      *     %d2: converted do_number
      *     %d0 ... validity flag, Zero: value of %d2 is valid, Non-Zero: not valid
      */
-    and.l   %d0,%d0
+    and.w   %d0,%d0
     bne     outer7
     /* get a number, push it */
     move.w  %d2,-(%a5)          /* put a number to DSP */
@@ -216,7 +226,7 @@ outer7:
     jsr     (crlf)
     move.l  #wordbuf,%a0
     jsr     (putstr)
-    jsr     (bl) 
+    jsr     (space) 
     move.l  #notfound_str,%a0
     jsr     (putstr)
     /* dispose linbuf content, re-getline */
@@ -235,7 +245,7 @@ dump_s1:
     beq      dump_se
     move.w   -(%a0),%d0
     jsr      (puthex4)
-    jsr      (bl)
+    jsr      (space)
     bra      dump_s1
 dump_se:
     move.w   (%a7)+,%d0
@@ -288,6 +298,45 @@ getch:
     /* now RXRDY */
     move.b  (uart_dreg),%d0
     rts
+/*
+ * getchar ... buffered input
+ */
+    .global getchar
+getchar:
+    move.w  (__bufn),%d0
+    and.w   %d0,%d0
+    bne     getchar_1
+    /* no chars, read chars from input stream to linbyf */
+    move.w  %d1,-(%a7)
+    move.l  #streambuf,%a0
+    move.w  %a0,(__bufp)    /* __bufp initialize */
+    move.w  #128,%d1
+    jsr     (accept)        /* buffered input stream to linbuf */
+    move.w  %d0,(__bufn)
+    move.w  (%a7)+,%d1
+getchar_1:
+    /* remains chars, return one of them */
+    add.w   #-1,%d0
+    move.w  %d0,(__bufn)
+
+    move.w  %a0,-(%a7)
+    move.w  %d1,-(%a7)
+    move.w  (__bufp),%a0
+    move.b  (%a0)+,%d0
+    move.w  %a0,(__bufp)
+    and.w   #0xff,%d0
+    move.w  (%a7)+,%d1
+    move.w  (%a7)+,%a0
+    rts
+
+/*
+ * accept: line input (aka gets)
+ * In:  %a0:  *buf
+ *      %d1:  bufsiz
+ * Out: %d0:  number of input chars
+ */
+
+
 /*
  * putstr
  * in: %a0: buf[0] ... n,length, buf[1]..[n] body of str
@@ -365,7 +414,7 @@ puthex2_safe:
     rts
 bl_safe:
     move.l  %d0,-(%a7)
-    jsr     (bl)
+    jsr     (space)
     move.l  (%a7)+,%d0
     rts
 putch_safe:
@@ -464,7 +513,7 @@ putone:
     jsr     (putch)
     move.w  (%a7)+,%d0      /* pop %d0 */
     rts
-bl:
+space:
     move.w  %d0,-(%a7)      /* push %d0 */
     move.b  #' ',%d0
     bra.b   putone
@@ -513,7 +562,17 @@ do_next:
     move.w  (%a6),%d0           /* 3 instructions equivalent to jmp  (%a6)+ */
     and.w   #0x3fff,%d0         /* clear precedence info */
     move.w  %d0,%a0
-    /* jsr     (dump_entry)*/        /* for debugging */
+    bra     do_next1
+    move.l  %a0,-(%a7)
+    jsr     (dump_entry)        /* for debugging */
+    move.b  #':',%d0
+    jsr     (putch)
+    move.b  #' ',%d0
+    jsr     (putch)
+    jsr     (dump_stack)
+    jsr     (crlf)
+    move.l  (%a7)+,%a0
+do_next1:
     add.w   #2,%a6
     jmp     (%a0)               /* exec next token */
 
@@ -575,9 +634,9 @@ false_str:
  * Out: %d0:  number of input chars
  */
 accept:
-    move.w  %a1,-(%a7)      /* push %a1 */
-    move.w  %d2,-(%a7)      /* push %d2 */
-    move.w  %a0,%a1         /* initialize ptr p(as %a1) */
+    move.l  %a1,-(%a7)      /* push %a1 */
+    move.l  %d2,-(%a7)      /* push %d2 */
+    move.l  %a0,%a1         /* initialize ptr p(as %a1) */
     move.w  %d1,%d2
     move.w  #0,%d1
 acceptl:
@@ -620,8 +679,8 @@ acceptz:
     add.w   #1,%d1
     /* return it */
     move.w  %d1,%d0
-    move.w  (%a7)+,%d2
-    move.w  (%a7)+,%a1
+    move.l  (%a7)+,%d2
+    move.l  (%a7)+,%a1
     rts
 acceptz2:
     bra.B   acceptz2
@@ -752,7 +811,7 @@ do_num_e4:
     rts
 
 /*
- * do_word
+ * do_word_asm
  * In: %a0 ... input string,
  *     %a1 ... destination buffer, [0]: length, [1...]: characters
  *     %d1 ... number of input characters(length of input string)
@@ -765,7 +824,7 @@ do_num_e4:
  */
 
     .global do_word
-do_word:
+do_word_asm:
     move.l  %a2,-(%a7)      /* push %a2 */
     move.w  %d3,-(%a7)      /* push %d3 */
     /*
@@ -778,7 +837,7 @@ do_word:
     add.l   #1,%a1          /* %a1 points to top of dest buffer */
     sub.l   #1,%d2          /* decrement one from dest counter */
 do_word1:
-    and.l   %d1,%d1         /* check if zero */
+    and.w   %d1,%d1         /* check if zero */
     beq     do_word3
     /* skip previous space characters */
     move.b  (%a0),%d0
@@ -790,9 +849,9 @@ do_word1:
     /* ok now we have reached the first non-space char */
 do_word2:
     /* check if next char is available */
-    and.l   %d1,%d1         /* source exhaused */
+    and.w   %d1,%d1         /* source exhaused */
     beq     do_word3
-    and.l   %d2,%d2         /* destination filled */
+    and.w   %d2,%d2         /* destination filled */
     beq     do_word4
     /* last char is minus, rewind it, and return */
     move.b  (%a0)+,%d0
@@ -800,13 +859,13 @@ do_word2:
     move.b  %d0,(%a1)+
     cmp.b   #32,%d0
     beq     do_word5
-    sub.l   #1,%d1
-    sub.l   #1,%d2
+    sub.w   #1,%d1
+    sub.w   #1,%d2
     bra     do_word2
 do_word5:
     /* find another non-space char */
-    sub.l   #1,%a0
-    sub.l   #1,%a1
+    sub.w   #1,%a0
+    sub.w   #1,%a1
 do_word3:
     /* finalize if source is exhausted */
 do_word4:
@@ -903,10 +962,9 @@ dump_entry:
     move.l  %a0,-(%a7)
     move.w  %a6,%d0
     jsr     (puthex4)
-    jsr     (bl)
+    jsr     (space)
     move.w  %a0,%d0
     jsr     (puthex4)
-    jsr     (crlf)
     move.l  (%a7)+,%a0
     rts
 
