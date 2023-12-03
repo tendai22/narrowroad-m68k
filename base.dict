@@ -157,6 +157,18 @@ code c! bytedeposite
 code base
     move.w  #__base,-(%a5)
     endcode
+//
+// hex, DECIMAL
+//
+word hex
+    lit 16
+    base
+    endword
+
+word decimal
+    lit 10
+    base
+    endword
 
 //
 // dictonary words
@@ -268,8 +280,9 @@ code in> in_stream
 //
 code word
     move.w  (%a5)+,%d1      // delimit .. %d1
+bp002:
+    eor.l   %d0,%d0
     move.w  (here_addr),%d0
-    and.l   #0xffff,%d0
     move.l  %d0,%a1         // %a1, here + 1(string start point)
     move.l  %a1,-(%a7)      // push %a1
     add.l   #1,%a1          // start point is here + 1
@@ -278,6 +291,7 @@ code word
 word_1:
     beq     word_2
     jsr     (getchar)       // buffered/block input
+bp003:
     move.b  %d0,(%a1)+
     cmp.b   %d1,%d0
     beq     word_2
@@ -330,6 +344,97 @@ word create
     swap
     bytedeposite
     // link offset remains, H will be added with it
+    allot
+    endword
+//
+// STATE, _STATE
+//
+code state
+    move.w  (__state),-(%a5)
+    endcode
+code _state
+    move.w  #__state,-(%a5)
+    endcode
+//
+// [, ]
+//
+code [ start_compile
+    add.w  #1,(__state)
+    endcode
+code ] end_compile
+    add.w  #-1,(__state)
+    endcode
+
+code puthex2
+    move.w  (%a5)+,%d0
+    jsr     (puthex2_safe)
+    endcode
+code puthex4
+    move.w  (%a5)+,%d0
+    jsr     (puthex4_safe)
+    endcode
+//
+// dump (addr -- ), dump 16 byte
+//
+word dump
+    lit 16
+    over
+    puthex4
+    lit ':'
+    emit
+dump_2:
+    dup
+    not
+    bne dump_1         // jump if zero
+    swap            // addr on top
+    dup
+    bytefetch
+    puthex2
+    space
+    lit 1
+    add
+    swap
+    lit 1
+    sub
+    bra dump_2
+dump_1:
+    drop
+    drop
+    cr
+    endword
+//
+// 's, s0 ... tick_s
+//
+code 's tick_s
+    move.w  %d0,-(%a5)       // dummy push
+    move.w  %a5,(%a5)
+    endcode
+code s0
+    move.w  #dsp_end,-(%a5)
+    endcode
+code put_list
+    move.w  (here_addr),%d0
+    and.l   #0xffff,%d0
+    move.l  %d0,%a1         // dest: %a1, here
+    move.l  #do_decimal,%a0    // src:  %a0  do_decimal, jmp (do_list)
+    move.w  (%a0)+,(%a1)+
+    move.w  (%a0)+,(%a1)+
+    move.w  (%a0)+,(%a1)+   // copy three words
+    move.w  %a1,(here_addr) // allot 3 words
+    endcode
+
+word : colon
+    create
+    put_list
+    start_compile
+    endword
+
+word ; semicolon
+    end_compile
+    lit #do_exit
+    here
+    exclamation
+    lit 2
     allot
     endword
 

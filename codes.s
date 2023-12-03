@@ -32,6 +32,10 @@ streambuf:
     .global __base
 __base:
     dc.w    10
+    .global __state
+__state:
+    dc.w    0
+
 /*
  * linbuffer for getchar
  */
@@ -44,6 +48,7 @@ __bufn:
     .org   0xfc00
 stack_bottom:
     .space 256
+    .global dsp_end
 dsp_end:
     .space 256
 rsp_end:
@@ -107,94 +112,71 @@ outer_uerr:
     jsr     (crlf)
 outer1_1:
     /* main loop */
-    jsr    (dump_stack)
+    jsr     (dump_stack)
     move.b  #93,%d0             /* ']' as a prompt */
-    jsr    (putch)
+    jsr     (putch)
     /* line input */
-    move.l  #linbuf,%a0         /* &linbuf[0] */
-    move.l  #64,%d1
-/*outer2:*/
-    jsr     (accept)
-    jsr     (crlf)
+    /* execute `word` */
+    move.w  #' ',-(%a5)
+    move.l  #do_word,%a0
+    jsr     (execute)
     /*
-     * %d0, number of input char
+     * Out: (%a5) ... string address
      */
-    and.w   %d0,%d0
-    beq     outer1               /* re getline */
+    jsr     (crlf)
+    move.w  (%a5)+,%a0
+bp002:
 /*
  * do_number
  */
-    move.l  #linbuf,%a0         /* &linbuf[0] */
-    move.l  %d0,%d1             /* number of input string */
-outer3:
-    /* parsing loop */
-    /* In: %a0 ... input string,
-     *     %d1 ... (rest) number of characters(length of input string)
-     */
-outer4:
-    /* at first, get a word */
-    /* In: %a0 ... input string,
-     *     %d1 ... number of input characters(length of input string)
-     *     %a1 ... destination buffer, [0]: length, [1...]: characters
-     *     %d2 ... max number of destination buffer
-     */
-    move.l  #wordbuf,%a1
-    move.w  #32,%d2
-    jsr    (do_word_asm)
-     * Out: %a0 .. next position in input string
-     *     %a1 ... next position in destination buffer
-     *     %d1 ... rest number of input characters (or zero)
-     *     %d2 ... rest number of destination buffer
-     *     %d0 ... result flag, return number of copied characters
-     */
-    and.w    %d0,%d0
-    bne      outer6
-    /* no words gotten, check end-of-data? */
-    and.w    %d1,%d1
-    beq      outer1  /* get next line */
-    bra      outer3  /* process rest characters */
-outer6:
     /* now gotten a word, find and execute */
     /* in: %a0 ... a word pointer
-     *     %a1 ... 'HEAD', top of the dictionary entry
+     *     %a1 ... 'LAST', top of the dictionary entry
      */
-    move.l   %a0,-(%a7)          /* push %a0 */
-    move.w   %d1,-(%a7)          /* push %d1 */
-    move.w   %d2,-(%a7)
-    move.l   #wordbuf,%a0
+    eor.l   %d1,%d1
+    move.w  (last_addr),%d1
+    move.l  %d1,%a1             /* set LAST to %a1 */
+    jsr     (do_find)
+bp005:
     /*
-    move.w   (%a0),%d2
-    and.w    #255,%d2
-    mulu.w   #256,%d0
-    or.w     %d2,%d0
-    move.w   %d0,(%a0)*/          /* set number of chars to wordbuf[0] */
-    move.l   #0x2004,%a1
-    move.w   (%a1),%a1           /* set HEAD to %a1 */
-    jsr      (do_find)
-    /* out: %a0 .. addr (top) of found entry, or zero if not found
+     * out: %a0 .. addr (top) of found entry, or zero if not found
      *      %a1 .. addr of CFR of found entry 
      */
-    move.l   %a0,%d0
-    and.w    %d0,%d0
-    beq      outer5
+    move.l  %a0,%d0
+    and.w   %d0,%d0
+    beq     outer5
+/* check execute/compile */
+    jsr     (check_if_compile)
+    and.w   %d0,%d0
+    beq     do_exec
+do_compile:
+    eor.l   %d0,%d0
+    move.l  %d0,%a0
+    move.w  (here_addr),%a0
+    move.w  %a1,(%a0)+          /* put word entry, and increment pointer */
+    move.w  %a0,(here_addr)
+    bra     outer1_1
 do_exec:
-    move.l   #next_addr,%a6     /* initialize IP (as return address) */
-    move.l   %a1,%a0            /* jump to CFR of the entry */
-    jmp      (%a0)
-next_addr:
-    dc.w     next_addr2
+bp003:
+    move.l  %a1,%a0
+    jsr     (execute)
+    bra     outer1_1
+
 outer5:
     /* word not found, try to convert a number */
     /* In: %a0 ... input string, (wordbuf)
      *     %d1 ... (rest) number of characters(length of input string)
      */
-    move.l  #wordbuf,%a0
+    eor.l   %d0,%d0
+    move.w  (here_addr),%d0
+    move.l  %d0,%a0
+    eor.l   %d1,%d1
     move.b  (%a0)+,%d1
-    and.w   #255,%d1
-    /* In: %a0 ... input string,
-     *     %d1 ... max number of characters(length of input string)
+    /* In: %a0 ... numbered word string
+     *     %d1 ... number of characters
      */
     jsr     (do_number)
+bp004:
     /* Out: %a0 .. next position in input string
      *     %d1 ... rest number of characters (or zero)
      *     %d2: converted do_number
@@ -202,26 +184,28 @@ outer5:
      */
     and.w   %d0,%d0
     bne     outer7
+    /* check status */
+    move.w  (__state),%d0
+    and.w   %d0,%d0
+    bne     outer8
     /* get a number, push it */
     move.w  %d2,-(%a5)          /* put a number to DSP */
-    bra     next_addr2
-next_addr2:
-    /* restore input linbuf, and rest size */
-    /* now the entry execution finished */
-    /* rewind stack */
-    move.w   (%a7)+,%d2
-    move.w   (%a7)+,%d1
-    move.l   (%a7)+,%a0
-    jmp      outer3
+    bne     outer1
+outer8:
+    /* compile a number, put lit and number */
+    eor.l   %d0,%d0
+    move.w  (here_addr),%d0
+    move.l  %d0,%a0
+    move.w  #do_lit,(%a0)+
+    move.w  %d2,(%a0)+
+    move.w  %a0,(here_addr)     /* 4 allot */
+    jmp     outer1_1
+
     /* error message */
 notfound_str:
-    dc.b     11
+    dc.b    11
     .ascii  "not found\r\n"
 outer7:
-    /* rewind stack */
-    move.w   (%a7)+,%d2
-    move.w   (%a7)+,%d1
-    move.l   (%a7)+,%a0
     /* not found error */
     jsr     (crlf)
     move.l  #wordbuf,%a0
@@ -232,6 +216,40 @@ outer7:
     /* dispose linbuf content, re-getline */
     bra     outer1
     /* end of word/number process, go to rest of linbuf */
+/*
+ * check_if_compile: compare word precedence and STATE VARIABLE
+ *  IN: %a0 ... word top, precedence byte
+ */
+check_if_compile:
+    move.b  (%a0),%d0
+    and.b   #0x7f,%d0
+    lsr.b   #5,%d0
+    and.b   #3,%d0
+    move.b  (__state),%d1
+    sub.b   %d1,%d0
+    /* if %d0 < %d1, compile, else execute */
+    move.l  #0,%d0  
+    bge     check_if1   /* jmp if exec zero or compile if one */
+bp001: 
+    add.l   #1,%d0
+check_if1:
+    rts
+
+/*
+ * execute ... execute word cfa
+ *   IN: %a0 ... cfa address
+ */
+execute:
+    move.l  %a6,-(%a7)
+    move.l  #exec_1,%a6     /* initialize IP (as return address) */
+    jmp     (%a0)
+exec_1:
+    dc.w    exec_2
+exec_2:
+    move.l  (%a7)+,%a6
+    rts
+    
+
 
 /* stack dump */
 dump_stack:
@@ -279,14 +297,22 @@ do_system0:
  */
     .global  putch
 putch:
-    move.w    %d0,-(%a7)          /*  push %d0 */
+    move.w  %d0,-(%a7)          /*  push %d0 */
+    move.l  %a0,-(%a7)
+    move.l  #uart_creg,%a0    
 putch1:
-    move.b  (uart_creg),%d0
+    move.b  (%a0),%d0
     and.b   #u3txif,%d0
-    beq.b    putch1
+    nop
+    nop
+    nop
+    beq.b   putch1
     /*  now TXBUF be ready */
-    move.w     (%a7)+,%d0         /*  pop %d0 */
+    move.l  (%a7)+,%a0
+    move.w  (%a7)+,%d0         /*  pop %d0 */
     move.b  %d0,(uart_dreg)
+    nop
+    nop
     rts
 /*
  * getch ... get one char in %d0
@@ -362,6 +388,7 @@ putstre:
 /*
  * puthex8
  */
+    .global puthex8
 puthex8:
     swap    %d0
     jsr     (puthex4)
@@ -371,6 +398,7 @@ puthex8:
  * puthex4 .. print 4 digit hex
  * IN: %d0
  */
+    .global puthex4
 puthex4:
     move.w  %d0,-(%a7)      /* push %d0 */
     ror.w   #8,%d0
@@ -378,6 +406,7 @@ puthex4:
     move.w  (%a7)+,%d0      /* pop %d1 */
     jsr     (puthex2)           /* type lower byte */
     rts
+    .global puthex2
 puthex2:
     move.w  %d0,-(%a7)      /* push %d0 */
     lsr.w   #4,%d0
@@ -385,6 +414,7 @@ puthex2:
     move.w  (%a7)+,%d0
     jsr     (puthex1)
     rts
+    .global puthex1
 puthex1:
     move.w  %d0,-(%a7)
     and.w   #0xf,%d0
@@ -402,11 +432,13 @@ puthex12:
 /*
  * safe routines 
  */
+    .global puthex4_safe
 puthex4_safe:
     move.l  %d0,-(%a7)
     jsr     (puthex4)
     move.l  (%a7)+,%d0
     rts
+    .global puthex2_safe
 puthex2_safe:
     move.l  %d0,-(%a7)
     jsr     (puthex2)
@@ -562,7 +594,7 @@ do_next:
     move.w  (%a6),%d0           /* 3 instructions equivalent to jmp  (%a6)+ */
     and.w   #0x3fff,%d0         /* clear precedence info */
     move.w  %d0,%a0
-    bra     do_next1
+    /* bra     do_next1 */
     move.l  %a0,-(%a7)
     jsr     (dump_entry)        /* for debugging */
     move.b  #':',%d0
@@ -887,9 +919,9 @@ do_word4:
  * Out: %d0: Zero ... match, NZ .. not same
  */
 do_same:
-    move.w  %d1,-(%a7)      /* push %d1 */
-    move.w  %a1,-(%a7)
-    move.w  %a0,-(%a7)
+    move.l  %d1,-(%a7)      /* push %d1 */
+    move.l  %a1,-(%a7)
+    move.l  %a0,-(%a7)
 do_same0:
     move.b  (%a0),%d0
     and.w   #0x1f,%d0       /* upper 3bit ignored in comparison */
@@ -910,9 +942,9 @@ do_same2:
     bne     do_same2        /* loop to next char */
     /* Zero if all compares are equal */
 do_same1:
-    move.w  (%a7)+,%a0
-    move.w  (%a7)+,%a1
-    move.w  (%a7)+,%d1
+    move.l  (%a7)+,%a0
+    move.l  (%a7)+,%a1
+    move.l  (%a7)+,%d1
     rts
 
 /*
@@ -967,4 +999,4 @@ dump_entry:
     jsr     (puthex4)
     move.l  (%a7)+,%a0
     rts
-
+    

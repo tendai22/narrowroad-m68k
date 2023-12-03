@@ -17,10 +17,17 @@ cat <<EOF
     .section DICT
 dict:
     dc.w   dict
+    .global here_addr
 here_addr:
-    dc.w   entry_end
+    dc.w  entry_end
+    .global last_addr
 last_addr:
-    dc.w   entry_head
+    dc.w  entry_head
+tail_addr:
+    dc.w  entry_end
+
+    /* extern word cfa's */
+    .global do_word
 EOF
 # dict definitions
 cat ${SRC} |awk '#

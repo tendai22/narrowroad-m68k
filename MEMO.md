@@ -33,7 +33,7 @@ linbuf末尾からASCII数字列を格納するようにしている。
 codes.sの先頭と、リンカスクリプト(`trip.ldscript`)による
 
 機械語コード4kB, 辞書4kBを想定している。
-
+```
 0000-0FFF: リセットベクタ、割り込みベクタ、ほか
 1000-1FFF: CODEセグメント、機械語コード
   code_top:
@@ -48,6 +48,7 @@ FC00-FEFF: STACKセグメント
   data stack:   FC00-FCFF(%a5)
   return stack: FD00-FDFF(%a6)
   assembly stack: FE00-FEFF(%a7)
+```
 
 ### 辞書エントリ追加(11/20)
 
@@ -1016,6 +1017,73 @@ bl, spaceの定義を好感した。blはスタックに空白文字を置く。
 dump_stack, dump_entry: ワード実行中のトレース表示。シングルステップにまではできていない。
 
 makedict.sh: lit, bra, bneのオペランド記述、ラベル算出対応。
+
+### コンパイルモード
+
+辞書ヘッダが作れるようになったので、いよいよ`:`, `;`を実装する。実質的にはouter interpreterにコンパイルモードを作成する。
+
+変数`STATE`の値が0, 1, 2で挙動を変えるようにする。
+
+|situation|STATE|0|1|2|
+|--|--|--|--|--|
+|実行中|0|execute|execute|execute|
+|コンパイル中|1|compile|execute|execute|
+|IMMEDIATEの直後|2|compile|compile|execute|
+||||||
+
+`STATE`, `_STATE`: 状態変数、外部インタプリタで参照。アセンブリ言語では、`__state`がアドレス。ワード領域を指す。
+
+`[`, `]`: コンパイルモードに入る、抜ける。である。具体的には、__stateの値をインクリメント、デクリメントする。
+
+`:`, `;`を作った。
+
+### outer loop 再構成(12/3)
+
+ワード内ルーチンの呼び出し機能`execute`を作り、ワード`word`を呼び出せるようにした。
+
+`: aho 1 + ;`をデバッグ中。
+* `:`によるヘッダ文字列`aho`、リンク作成、`jmp (do_list)`埋め込みまでOK.
+* 次のエントリ埋め込みからできていない。ワード`1`をHEREに読み込むところまではできている。が` not found`が連発して`lit 1`埋め込みに進まない。
+* 文字列`1`はヘッダの直後に入っている。この辺十分考えられていないか。
+
+```
+break at 10F8>
+000010F8:C040 A0:2525 A1:0004 A2:0000 A4:FE00 A5:FCFE A6:0000 D0:FFFFFFFF D1:0001 D2:0000 D3:0000
+
+ not found
+251A ]break at 22F6>
+000022F6:B180 A0:22F4 A1:0004 A2:0000 A4:FE00 A5:FCFE A6:117E D0:0000 D1:0020 D2:0000 D3:0000
+tail[251a]: 83 61 68 6F 4E F9 00 00 13 B6 01 31 20 00 00 00 00 00 00 00
+```
+
+### putchハングの回避(12/3)
+
+Musashiでデバッグ中にputchで文字列を書き続けるとハングする。結構高頻度でハングしてしまい、`word`ワード実行が完了しないほど。
+
+NOP 埋め込みまくったらハングしなくなった。
+
+```
+    .global  putch
+putch:
+    move.w  %d0,-(%a7)          /*  push %d0 */
+    move.l  %a0,-(%a7)
+    move.l  #uart_creg,%a0    
+putch1:
+    move.b  (%a0),%d0
+    and.b   #u3txif,%d0
+    nop
+    nop
+    nop
+    beq.b   putch1
+    /*  now TXBUF be ready */
+    move.l  (%a7)+,%a0
+    move.w  (%a7)+,%d0         /*  pop %d0 */
+    move.b  %d0,(uart_dreg)
+    nop
+    nop
+    rts
+```
+
 
 ### 付録. Moore_74に挙げられた基本ワード
 
