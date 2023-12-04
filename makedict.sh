@@ -42,8 +42,16 @@ BEGIN {
 /^word / || /^code /{
     mode = $1
     str = name = $2
+    precedence = 0
     if (NF > 2) {
-        name = $3
+        if ($4 ~ /immediate/) {
+            precedence = 32
+            name = $3
+        } else if ($3 ~ /immediate/) {
+            precedence = 32
+        } else {
+            name = $3
+        }
     }
     len = length(str);
     body = ""
@@ -60,7 +68,7 @@ BEGIN {
     print ""
     printf "entry_%03d:\n", nels;
     printf "e_%s:\n", name
-    printf "    dc.b    %d\n", len + 128
+    printf "    dc.b    %d\n", len + 128 + precedence
     printf "    .ascii  \"%s\"\n", str
     printf "    .align  2\n"
     printf "    dc.w    %s\n", prev_link

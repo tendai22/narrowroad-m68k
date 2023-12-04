@@ -163,11 +163,13 @@ code base
 word hex
     lit 16
     base
+    exclamation
     endword
 
 word decimal
     lit 10
     base
+    exclamation
     endword
 
 //
@@ -280,7 +282,6 @@ code in> in_stream
 //
 code word
     move.w  (%a5)+,%d1      // delimit .. %d1
-bp002:
     eor.l   %d0,%d0
     move.w  (here_addr),%d0
     move.l  %d0,%a1         // %a1, here + 1(string start point)
@@ -291,7 +292,6 @@ bp002:
 word_1:
     beq     word_2
     jsr     (getchar)       // buffered/block input
-bp003:
     move.b  %d0,(%a1)+
     cmp.b   %d1,%d0
     beq     word_2
@@ -374,7 +374,7 @@ code puthex4
     jsr     (puthex4_safe)
     endcode
 //
-// dump (addr -- ), dump 16 byte
+// dump (addr -- addr), dump 16 byte, next addr remains
 //
 word dump
     lit 16
@@ -398,8 +398,7 @@ dump_2:
     sub
     bra dump_2
 dump_1:
-    drop
-    drop
+    drop            // remain next address
     cr
     endword
 //
@@ -423,19 +422,32 @@ code put_list
     move.w  %a1,(here_addr) // allot 3 words
     endcode
 
+word put_link
+    last
+    atfetch         // addr of last entry
+    here
+    exclamation     // put it on the entry body
+    lit 2
+    allot
+    endword
+
 word : colon
     create
+    put_link
     put_list
     start_compile
     endword
 
-word ; semicolon
+word ; semicolon immediate
     end_compile
     lit #do_exit
     here
     exclamation
     lit 2
     allot
+    // tos is current entry top
+    last
+    exclamation     // change last
     endword
 
 word test2

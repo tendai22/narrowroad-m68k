@@ -125,7 +125,6 @@ outer1_1:
      */
     jsr     (crlf)
     move.w  (%a5)+,%a0
-bp002:
 /*
  * do_number
  */
@@ -137,7 +136,6 @@ bp002:
     move.w  (last_addr),%d1
     move.l  %d1,%a1             /* set LAST to %a1 */
     jsr     (do_find)
-bp005:
     /*
      * out: %a0 .. addr (top) of found entry, or zero if not found
      *      %a1 .. addr of CFR of found entry 
@@ -147,7 +145,7 @@ bp005:
     beq     outer5
 /* check execute/compile */
     jsr     (check_if_compile)
-    and.w   %d0,%d0
+    and.w   %d0,%d0             /* zero -> execute, one -> compile */
     beq     do_exec
 do_compile:
     eor.l   %d0,%d0
@@ -157,7 +155,6 @@ do_compile:
     move.w  %a0,(here_addr)
     bra     outer1_1
 do_exec:
-bp003:
     move.l  %a1,%a0
     jsr     (execute)
     bra     outer1_1
@@ -176,7 +173,6 @@ outer5:
      *     %d1 ... number of characters
      */
     jsr     (do_number)
-bp004:
     /* Out: %a0 .. next position in input string
      *     %d1 ... rest number of characters (or zero)
      *     %d2: converted do_number
@@ -219,20 +215,22 @@ outer7:
 /*
  * check_if_compile: compare word precedence and STATE VARIABLE
  *  IN: %a0 ... word top, precedence byte
+ *  OUT: %d0: 1: compile, 0: execute
  */
 check_if_compile:
-    move.b  (%a0),%d0
-    and.b   #0x7f,%d0
-    lsr.b   #5,%d0
-    and.b   #3,%d0
-    move.b  (__state),%d1
-    sub.b   %d1,%d0
-    /* if %d0 < %d1, compile, else execute */
-    move.l  #0,%d0  
-    bge     check_if1   /* jmp if exec zero or compile if one */
-bp001: 
-    add.l   #1,%d0
+    move.b  (%a0),%d1
+    and.b   #0x7f,%d1
+    lsr.b   #5,%d1
+    and.b   #3,%d1
+    and.w   #0xff,%d1       /* word extension */
+    move.w  (__state),%d0
+    sub.w   %d1,%d0
+    bgt     check_if1   /* jmp(plus) then compile, one or exec if zero */
+    /* if plus(%d1 < %d0), compile, else execute */
+    eor.l   %d0,%d0
+    rts  
 check_if1:
+    move.l  #1,%d0
     rts
 
 /*
@@ -248,8 +246,78 @@ exec_1:
 exec_2:
     move.l  (%a7)+,%a6
     rts
-    
+/*
+ * inner interpreter
+ */
+    .global do_list
+do_list:                        /* %a0 points to the code of the word, 
+                                 * where it has address of 'do_list' */
+    move.w  %a6,-(%a4)          /* push IP */
+    move.w  %a0,%a6             /* address points to the code area of new word
+                                 * IP now points to the address of the first pointer */
+    add.w   #6,%a6              /* IP points the first token address
+                                 * the size of `jmp do_list` is 4 bytes
+                                 */
+    jmp     do_next
 
+    .global do_exit
+do_exit:
+    move.w  (%a4)+,%a6          /* pop IP from RSP */
+    move.w  (%a6),%a0
+    add.w   #2,%a6
+    jmp     (%a0)
+    .global do_next
+do_next:
+    move.w  (%a6),%d0           /* 3 instructions equivalent to jmp  (%a6)+ */
+    and.w   #0x3fff,%d0         /* clear precedence info */
+    move.w  %d0,%a0
+    bra     do_next1
+    /* trace word list execution */
+    move.l  %a0,-(%a7)
+    jsr     (dump_entry)        /* for debugging */
+    move.b  #':',%d0
+    jsr     (putch)
+    move.b  #' ',%d0
+    jsr     (putch)
+    jsr     (dump_stack)
+    jsr     (crlf)
+    move.l  (%a7)+,%a0
+do_next1:
+    add.w   #2,%a6
+    jmp     (%a0)               /* exec next token */
+
+/* virtual machine instruction */
+    .global do_lit
+do_lit:
+    move.w  (%a6)+,%d0          /* next word to %d0, immediate operand of 'do_lit' */
+    move.w   %d0,-(%a5)         /* push it to Data Stack */
+    bra.b   do_next
+/* do_code */
+do_code:
+    move.l  #do_cexit,-(%a7)    /* return address */
+    move.l  %a4,-(%a7)          /* save %a4(RSP), %a5(DSP), %a6(IP) */
+    move.l  %a5,-(%a7)
+    move.w  %a6,-(%a7)
+    add.w   #2,%a0              /* next of the word, top of machine code */
+    move.w  %a0,-(%a7)
+    rts                         /* jmp %a0+2 */
+do_cexit:
+    move.w  (%a7)+,%a6
+    move.w  (%a7)+,%a5
+    move.w  (%a7)+,%a4
+    bra.b   do_next
+/* branch */
+    .global do_bne
+do_bne:
+    move.w  (%a5)+,%d0
+    and.w   %d0,%d0
+    bne.w   do_bra
+    add.w   #2,%a6
+    bra.w   do_next
+    .global do_bra
+do_bra:
+    add.w   (%a6)+,%a6
+    bra.w   do_next
 
 /* stack dump */
 dump_stack:
@@ -303,6 +371,15 @@ putch:
 putch1:
     move.b  (%a0),%d0
     and.b   #u3txif,%d0
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
     nop
     nop
     nop
@@ -569,85 +646,14 @@ typeb_sub1:
 
 
 
-/*
- * inner interpreter
- */
-    .global do_list
-do_list:                        /* %a0 points to the code of the word, 
-                                 * where it has address of 'do_list' */
-    move.w  %a6,-(%a4)          /* push IP */
-    move.w  %a0,%a6             /* address points to the code area of new word
-                                 * IP now points to the address of the first pointer */
-    add.w   #6,%a6              /* IP points the first token address
-                                 * the size of `jmp do_list` is 4 bytes
-                                 */
-    jmp     do_next
 
-    .global do_exit
-do_exit:
-    move.w  (%a4)+,%a6          /* pop IP from RSP */
-    move.w  (%a6),%a0
-    add.w   #2,%a6
-    jmp     (%a0)
-    .global do_next
-do_next:
-    move.w  (%a6),%d0           /* 3 instructions equivalent to jmp  (%a6)+ */
-    and.w   #0x3fff,%d0         /* clear precedence info */
-    move.w  %d0,%a0
-    /* bra     do_next1 */
-    move.l  %a0,-(%a7)
-    jsr     (dump_entry)        /* for debugging */
-    move.b  #':',%d0
-    jsr     (putch)
-    move.b  #' ',%d0
-    jsr     (putch)
-    jsr     (dump_stack)
-    jsr     (crlf)
-    move.l  (%a7)+,%a0
-do_next1:
-    add.w   #2,%a6
-    jmp     (%a0)               /* exec next token */
-
-/* virtual machine instruction */
-    .global do_lit
-do_lit:
-    move.w  (%a6)+,%d0          /* next word to %d0, immediate operand of 'do_lit' */
-    move.w   %d0,-(%a5)         /* push it to Data Stack */
-    bra.b   do_next
 /* do_add */
     .global do_add
 do_add:
     move.w  (%a5)+,%d0          /* POP to %d0 */
     add.w   (%a5)+,%d0          /* POP and add to %d0 */
     move.w  %d0,-(%a5)          /* PUSH it to DS */
-    bra.b   do_next
-/* do_code */
-do_code:
-    move.l  #do_cexit,-(%a7)    /* return address */
-    move.l  %a4,-(%a7)          /* save %a4(RSP), %a5(DSP), %a6(IP) */
-    move.l  %a5,-(%a7)
-    move.w  %a6,-(%a7)
-    add.w   #2,%a0              /* next of the word, top of machine code */
-    move.w  %a0,-(%a7)
-    rts                         /* jmp %a0+2 */
-do_cexit:
-    move.w  (%a7)+,%a6
-    move.w  (%a7)+,%a5
-    move.w  (%a7)+,%a4
-    bra.b   do_next
-/* branch */
-    .global do_bne
-do_bne:
-    move.w  (%a5)+,%d0
-    and.w   %d0,%d0
-    bne.w   do_bra
-    add.w   #2,%a6
-    bra.w   do_next
-
-    .global do_bra
-do_bra:
-    add.w   (%a6)+,%a6
-    bra.w   do_next
+    bra   do_next
 
     .global true_str
 true_str:
@@ -738,6 +744,7 @@ tonumber0:
     add.b   #10,%d0         /* %0 == 10--15 */
 tonumber1:
     /* now get a number */
+    and.w   #0xff,%d0
     cmp.w   (__base),%d0   /* %d0 - __base */
     bmi     tonumbere       /* branch if %d0 < #__base */
 tonumber_bad:
@@ -769,18 +776,18 @@ do_number:
      * %d1 number of chars (rest chars)
      */
     eor.l   %d4,%d4         /* clear %d4 flags */
+    eor.l   %d3,%d3
     move.w  (__base),%d3
-    and.l   #65535,%d3      /* %d3 as __base */
     eor.l   %d2,%d2         /* clear accumulator */
 do_num1:
-    and.l   %d1,%d1         /* check if zero */
+    and.w   %d1,%d1         /* check if zero */
     beq     do_num_e
     /* skip previous space characters */
     move.b  (%a0),%d0
     cmp.b   #32,%d0
     bne     do_num2
     add.l   #1,%a0
-    sub.l   #1,%d1
+    sub.w   #1,%d1
     bra     do_num1
     /* ok now we have reached the first non-space char */
 do_num2:
@@ -789,26 +796,27 @@ do_num2:
     /* minus char */
     or.w    #1,%d4          /* set %d4 minus flag */
     add.l   #1,%a0
-    sub.l   #1,%d1
+    sub.w   #1,%d1
     /* check if next char is available */
-    and.l   %d1,%d1
+    and.w   %d1,%d1
     bne     do_num3
     /* last char is minus, rewind it, and return */
     sub.l   #1,%a0
-    add.l   #1,%d1
+    add.w   #1,%d1
     bra     do_num_e
     /* gather digits */
 do_num3:
-    and.l   %d1,%d1
+    and.w   %d1,%d1
     beq     do_num_e
     move.b  (%a0)+,%d0
-    sub.l   #1,%d1    
+    sub.w   #1,%d1    
     jsr     (tonumber)
     and.l   %d0,%d0
     bmi     do_num5
     /* accumulate it */
     mulu    %d3,%d2
-    add.w   %d0,%d2         /* %d2 = %d2 * (base) + %d0 */
+    and.l   #0xff,%d0
+    add.l   %d0,%d2         /* %d2 = %d2 * (base) + %d0 */
     /* set valid flag */
     or.w    #2,%d4
     bra     do_num3
