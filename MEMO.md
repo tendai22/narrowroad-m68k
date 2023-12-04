@@ -1084,6 +1084,40 @@ putch1:
     rts
 ```
 
+### 今後のイメージ(12/4)
+
+word定義を辞書にいろいろ書いているうちに、少し見えてきた。
+* base.dict 辞書ファイルに機械語ルーチンもワードルーチンも書ける。
+* inner interpreterだけ機械語でがりがりに作っておけば、あとはbase.dictに書くことができる。
+  + innter interpreterは機械語ルーチンのセット(`next`, `exit`, `list`)なので、辞書に書く手もある。
+  + 但し、`next`, `exit`, `list`はワードルーチン内でワード(仮想Forthマシンの機械語)として書くことはない。
+* 結局、辞書ファイルに書かない(書いてもいいが)機能は以下の通り
+  ⁺ 初期化(スタックポインタ、データスタック、リターンスタック、辞書の登録)
+    + 辞書の変数は辞書最初に並べておく。アセンブル時に初期定数を埋めておく。
+  + outer interpreter 呼び出し, 
+    + スタック初期化後`interpret`を呼び出す。
+    + `interpret`から抜け出すのは`abort`が実行された時。
+    + スタックトップ(リザルトコード)により処理を変える(OSに戻る、)
+  + inner interpreter, `next`, `exit`, `list`
+  + `putch`, `getch`, (`kbhit`もかな？)
+  + バッファ化ストリーム入力`getchar`
+* 辞書に書く機能: ここに書く機械語ルーチンは`jsr (execute)`できる。
+  + outer interpreter, `word`, `find`, `execute`とメインループ`interpret`
+    + 無限ループ、`abort`仮想機械語で抜け出す(unix の exit(2)のイメージ)。
+  + outer interpreterのコンパイル機能, `create`, `[`, `]`, `'(tick)`, ...
+  + outer interpreterは結局のところ`getchar`待ちに入って待つ。
+  + ユーザ変数: `here_addr`, `state_addr`, `tail_addr`, `base_addr`, ...
+  + スタック操作、加減乗除演算子、メモリアクセス、
+  + 仮想機械語: `lit`, `bra`, `bne`, `abort`
+  + 定義語: `:`, `;`, `variable`, `constant`, 
+  + 文字列定義: `."`, ...
+* さらに、Forth定義ファイルも用意する。
+  * 組み込み系だと抱き込み、INTERPRETに読み込ませる。
+  * エミュレータだと引数に`*.F`ファイル(拡張子を変える)
+* outer interpreterもワードルーチンで書ける。当面それを目指す。
+* バッファ化ストリーム入力`getchar`は私のオリジナル。昔のForthインタプリタは行入力バッファ前提。
+* `getchar`も辞書エントリで書けなくもないが機械語ルーチンになる。バッファリングと1文字返し
+
 
 ### 付録. Moore_74に挙げられた基本ワード
 
@@ -1096,7 +1130,7 @@ Words concerned with the dictionary:
 |||
 |--|--|
 |HERE|Address of next available word. 
-|LAST                             @|Address of last entry. 
+|LAST @|Address of last entry. 
 |WHERE|Type name of last entry. 
 |n ,|Compile number into dictionary. 
 |VOCABULARY word|Define the name of a vocabulary.
