@@ -135,7 +135,7 @@ outer1_1:
     eor.l   %d1,%d1
     move.w  (last_addr),%d1
     move.l  %d1,%a1             /* set LAST to %a1 */
-    jsr     (do_find)
+    jsr     (do_find_asm)
     /*
      * out: %a0 .. addr (top) of found entry, or zero if not found
      *      %a1 .. addr of CFR of found entry 
@@ -371,25 +371,11 @@ putch:
 putch1:
     move.b  (%a0),%d0
     and.b   #u3txif,%d0
-    nop
-    nop
-    nop
-    nop
-    nop
-    nop
-    nop
-    nop
-    nop
-    nop
-    nop
-    nop
     beq.b   putch1
     /*  now TXBUF be ready */
     move.l  (%a7)+,%a0
     move.w  (%a7)+,%d0         /*  pop %d0 */
     move.b  %d0,(uart_dreg)
-    nop
-    nop
     rts
 /*
  * getch ... get one char in %d0
@@ -726,9 +712,11 @@ acceptz2:
 
 /*
  * tonumber
- * In: %d0  ... character
- * Out: %d0 ... result number (positive), not-a-numer (negative)
+ * In: %d0(byte)  ... character
+ *     %d3(word)  ... base
+ * Out: %d0(long) ... result number (positive), not-a-numer (negative)
  */
+    .global tonumber
 tonumber:
     cmp.b   #96,%d0
     bmi     tonumber0
@@ -745,7 +733,7 @@ tonumber0:
 tonumber1:
     /* now get a number */
     and.w   #0xff,%d0
-    cmp.w   (__base),%d0   /* %d0 - __base */
+    cmp.w   %d3,%d0   /* %d0 - __base */
     bmi     tonumbere       /* branch if %d0 < #__base */
 tonumber_bad:
     eor.l   %d0,%d0
@@ -810,7 +798,7 @@ do_num3:
     beq     do_num_e
     move.b  (%a0)+,%d0
     sub.w   #1,%d1    
-    jsr     (tonumber)
+    jsr     (tonumber)      /* assume %d3 has (__base)
     and.l   %d0,%d0
     bmi     do_num5
     /* accumulate it */
@@ -926,6 +914,7 @@ do_word4:
  * In: %a0, %a1 ... strings
  * Out: %d0: Zero ... match, NZ .. not same
  */
+    .global do_same
 do_same:
     move.l  %d1,-(%a7)      /* push %d1 */
     move.l  %a1,-(%a7)
@@ -962,7 +951,7 @@ do_same1:
  * out: %a0 .. addr (top) of found entry, or zero if not found
  *      %a1 .. addr of CFR of found entry 
  */
-do_find:
+do_find_asm:
     move.w  %d0,-(%a7)
 find0:
     jsr     do_same

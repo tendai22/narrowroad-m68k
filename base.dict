@@ -3,6 +3,188 @@
 #
 
     org 0
+//
+// inner interpreter
+//
+code exit word_exit
+    jmp  (do_exit)
+    endcode
+
+//
+// outer interpreter
+//
+
+// find (c-addr -- 0(not found), 
+//                 xt 1(find, normal), 
+//                 xt -1(find, immediate))
+// xt means execution token, or cfa of the word
+code find
+    // (c-addr - 0| xt 1| xt -1)
+    eor.l   %d0,%d0
+    move.l  %d0,%a0
+    move.w  (%a5)+,%a0      // c-addr -> %a0
+    move.l  %d0,%a1
+    move.w  (last_addr),%a1    // here -> %a1
+find_0:
+    jsr     do_same
+    cmp.b   #0,%d0
+    beq     find_1
+    /* get the next entry top */
+    eor.l   %d0,%d0
+    move.b  (%a1),%d0
+    and.b   #0x1f,%d0   // clear precedence bits(3bits)
+    add.b   #2,%d0
+    lsr     #1,%d0
+    add.w   %d0,%d0     /* word offset to byte offset */
+    add.w   %d0,%a1
+    move.w  (%a1),%d0   /* %d0 now points to next entry top */
+    and.w   #0xbfff,%d0 /* test %d0 (next ptr value) */
+    move.w  %d0,%a1     /* clear precedence flag bits */   
+    bne     find_0
+    // not found, return zero
+    move.w  %d0,-(%a5)
+    bra     find_2 
+find_1:
+    // find an entry
+    move.l  %a1,%a0
+    move.b  (%a0),%d0
+    and.w   #0x1f,%d0
+    lsr     #1,%d0
+    add.b   #1,%d0
+    lsl     #1,%d0
+    add.w   %d0,%a1
+    add.w   #2,%a1      /* skip PTR */
+    move.w  %a1,-(%a5)  // push entry address(CFA)
+    // 1 or -1, based on the precedence
+    eor.w   %d0,%d0
+    move.b  (%a0),%d0
+    lsr.b   #4,%d0
+    and.b   #6,%d0      // 0: normal, 2: immediate, 4: super
+    neg.w   %d0         // 0: normal, -2: immediate, -4: super
+    add.w   #1,%d0      // 1: normal, -1: immediate, -3: super
+    move.w  %d0,-(%a5)  // push result
+find_2:
+    endcode
+
+//
+// execute .. (xt -- )
+//
+code execute execute_word
+    move.w  (%a5)+,%a0
+    move.w  %a6,-(%a7)  // save IP
+    move.w  #exec_11,%a6
+    jmp     (%a0)
+exec_11:
+    dc.w    exec_12
+exec_12:
+    move.w  (%a7)+,%a6
+    endcode
+
+//
+// number 
+//   (c-addr base -- 0 | single 1 | double 2)
+//
+code number
+    move.w  %d3,-(%a7)      // push %d3
+    move.w  %d4,-(%a7)      // push %d4
+    //
+    move.w  (%a5)+,%d3      // base -> %d3
+    eor.l   %d1,%d1
+    move.l  %d1,%a0
+    move.w  (%a5)+,%a0      // c-addr -> %a0
+    eor.w   %d1,%d1
+    move.b  (%a0)+,%d1      // # of chars -> %d1(word) 
+    // %a0 ... input string
+    // %d1 ... number of characters
+    /*
+     * %d4 bit0: minus flag,
+     *     bit1: data valid flag
+     * %d3 __base
+     * %d2 accumulator
+     * %d1 number of chars (rest chars)
+     */
+    eor.l   %d4,%d4         /* clear %d4 flags */
+    eor.l   %d2,%d2         /* clear accumulator */
+    eor.l   %d0,%d0         // clear upper 8 bit of %d0
+do_num1:
+    and.w   %d1,%d1         /* check if zero */
+    beq     do_num_invalid  // invalid if null string
+    // check the first char
+    cmp.b  #45,(%a0)        // first char is minus?
+    bne     do_num3
+    /* minus char */
+    or.w    #1,%d4          /* set %d4 minus flag */
+    add.l   #1,%a0
+    sub.w   #1,%d1
+    /* check if next char is available */
+    beq     do_num_invalid  // minus only word means invalid
+    /* gather digits */
+do_num3:
+    and.w   %d1,%d1
+    beq     do_num_e
+    eor.l   %d0,%d0
+    move.b  (%a0)+,%d0
+    sub.w   #1,%d1
+    jsr     (tonumber)
+    and.l   %d0,%d0
+    bmi     do_num_invalid
+    /* accumulate it */
+    nop
+    eor.l   %d4,%d4
+    move.w  %d2,%d4    
+    mulu    %d3,%d4         // %d4 = lower 16bit * base
+    swap    %d2
+    and.l   #0xffff,%d2
+    mulu    %d3,%d2         // $d2 = upper 16bit * base
+    and.l   #0xffff,%d2
+    swap    %d2
+    add.l   %d4,%d2
+    and.l   #0xff,%d0
+    add.l   %d0,%d2         // %d2 = %d2 * (base) + %d0
+    bra     do_num3
+do_num_invalid:
+    // non number character, invalid conversion
+    eor.w   %d0,%d0
+    move.w  %d0,-(%a5)
+    bra     do_num_end
+
+do_num_e:
+    /* valid char */
+    and.l   #1,%d4           /* check minus flag */
+    beq     do_num_e3
+    neg.l   %d2
+do_num_e3:
+    // double word?
+    move.w  #1,%d1
+bp001:    
+    move.l  %d2,%d0
+    swap    %d0
+    cmp.w   #0,%d0
+    beq     do_num_single_p
+    cmp.w   #0xffff,%d0
+    beq     do_num_single_n
+    // double number, -> high low #2
+    bra     do_num_double
+do_num_single_p:
+    and.l   %d0,%d0
+    bpl     do_num_single
+    bra     do_num_double
+do_num_single_n:
+    and.l  %d0,%d0
+    bmi     do_num_single
+    // fall down do_num_double
+do_num_double:
+    add.w   #1,%d1
+    move.w  %d0,-(%a5)  // push high
+do_num_single:
+    swap    %d0
+    move.w  %d0,-(%a5)  // push low
+    move.w  %d1,-(%a5)   // push 1 or 2
+do_num_end:
+    move.w  (%a7)+,%d4
+    move.w  (%a7)+,%d3
+    endcode
+
 /*
  * primitive words
  */
@@ -474,4 +656,12 @@ word ttest
     lit  #true_str
     types
     endword
+
+word test
+    lit 32
+    word
+    lit 10
+    number
+    endword
+
 
