@@ -156,7 +156,6 @@ do_num_e:
 do_num_e3:
     // double word?
     move.w  #1,%d1
-bp001:    
     move.l  %d2,%d0
     swap    %d0
     cmp.w   #0,%d0
@@ -184,6 +183,75 @@ do_num_end:
     move.w  (%a7)+,%d4
     move.w  (%a7)+,%d3
     endcode
+
+code xxx
+bp001:
+    nop
+    endcode
+//
+// return stack
+//
+code >r pushr
+    // push to return stack
+    move.w  (%a5)+,-(%a4)
+    endcode
+code r> popr
+    move.w  (%a4)+,-(%a5)
+    endcode
+
+//
+// ,(comma) ... put a word to the dict entry
+//
+code , comma
+    eor.l   %d0,%d0
+    move.w  (here_addr),%d0
+    move.l  %d0,%a0
+    move.w  (%a5)+,(%a0)
+    endcode
+//
+// IF ... ELSE ... THEN
+//
+word if immediate
+    // put `do_bne`
+    lit bne
+    comma               // put `do_bne` to dict
+    lit 2
+    allot               // +2 h
+    // save operand addr
+    here                // get dict poiner
+    pushr               // save operand address
+    lit 2
+    allot
+    endword
+word else immediate
+    // put `do_bra`
+    lit bra
+    comma
+    lit 2
+    allot
+    // restore rstack top
+    here
+    pushr               // here -> rstack
+    then
+    endword
+
+word then immediate
+    here
+    // (here)
+    popr
+    // (here prev-addr)
+    swap
+    // (prev-addr here)
+    over
+    // (prev-addr here prev-addr)
+    sub
+    // (prev-addr offset)
+    swap
+    // (offset prev-addr)
+    exclamation
+    lit 2
+    allot
+    endword
 
 /*
  * primitive words

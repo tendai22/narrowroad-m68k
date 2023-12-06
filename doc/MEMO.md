@@ -1277,6 +1277,52 @@ word ; semicolon immediate
 
 `INTERPRET`が見えてきた。まず条件文とループを作る。
 
+```
+    (cond) IF ..(if true)... ELSE ..(if false)... THEN
+```
+
+ワードリストとしては以下の形式になる。
+
+```
+    ...
+    (cond)
+11:    bne   label1
+12:    ...
+       (if true)
+19:    ...
+20:     bra label2
+21: label1:
+22:     ...
+        (if false)
+32:     ...
+33: label2:
+
+```
+
+アセンブリ言語で書くときに条件分岐命令とラベルを使ってtrue節とfalse節を順に書いてゆく。そのイメージそのままでワードと`bne`, `bra`疑似命令を使って記述する。
+
+上記11行目をワード`IF`のコンパイルで生成する。20,21行目を`ELSE`で、33行目を`THEN`のコンパイルで生成する。
+
+`IF`のコンパイル
+* bne label1, つまり、do_bneのアドレス1ワードを置く。次のワードが分岐オペランドだが、この時点ではどの番地に飛べばよいか分からないので、このワードは空けておく。
+* 代わりに、このワードのアドレスをスタックに保持しておく。データスタックと別にリターンスタックを用意して、通常はそこに置く。
+* `ELSE`または`THEN`が出てきた時点で飛び先アドレスが確定するから、そこでリターンスタックからアドレスを取り出し、オフセットを計算して、そのアドレス(オペランド置き場)にオフセットを書き込む。
+
+`ELSE`のコンパイル
+* まずbra label2を置く。do_braのアドレス１ワードを置き、次のワードがbraのオペランドとなる。これもリターンスタックに置いて置く。
+* 先ほど`IF`のコンパイルで保存したアドレスをリターンスタックから取り出す。カレントポインタとそのアドレスの差を計算し、そのアドレスの指すワードに計算して得た差を書き込む。
+
+`THEN`のコンパイル
+* リターンスタックに保存しておいたアドレスを取り出し、`ELSE`と同様にオフセットを計算して先のアドレスに書き込む。
+
+このように、「リターンスタックにオペランドのアドレスを保存する」「リターンスタックに保存しておいたアドレスを取り出し、カレントポインタとの差を取りオペランドを書き込む」の2種類の操作が基本になることが分かる。
+
+ループも、これと同様に、2種類の操作で行う。
+
+#### ワード`R>`, `>R` ... リターンスタックへのデータ保存・取り出し
+
+* `>R`: リターンスタックにデータスタックトップを書き込む
+* `R>`: リターンスタックからデータスタックにプッシュする
 
 
 
@@ -1407,6 +1453,23 @@ and the definition of a VECTOR:
 A comparison or this definition of VECTOH with the fl.rst one exhibit:-, tlle major differences between DOES> an:-1 ;COOE, namely that the use of high-level FORTH following DOES> is often more convenient than supplyi.ng code to follo1,i ;CODE.  This method is also more machine independent. 
 
 Hopefully, it has bt~en shown that different kinds of words may be usefully defined. Basic FORTH provides only CONSTANT and VARIABLE, but standard dcfinitlons of most of the words discussed here are available. If you encounter more than one instance of a p3rticular kind of word, or use such a word rrequently, it can pay orr in convenience, efficiency, and elegance, to name and characterize those properties that make it unique.
+
+### そろそろForthプログラムを読み込む機能を作ろう
+
+*.F拡張子を持つファイルを読み込ませる。
+*.X形式に変換して、他のバイナリと同様に読み込ませる。68000メモリ中にコピーする。
+* メモリ領域0x4000の先頭1ワードに長さを置く。このワードが非ゼロであれば、0x4002番地から1バイトずつouter interpreterに読み込ませる。
+* .F拡張子を持つファイルを与えると.X形式に変換するCプログラムを書く。
+
+インタプリタ先頭で、メモリ 0x4002から長さ(0x4000)だけ読み込ませるようにした。
+出来ている様子。
+
+### 0x8000: abort CPU と言われる(12/7)
+
+なぞである。堕ちる場所がいろいろになっている。
+
+
+
 
 ### 付録. Moore_74に挙げられた基本ワード
 

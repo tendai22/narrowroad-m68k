@@ -56,6 +56,10 @@ category:
 |x|user|tail|code
 |x|user|base|code
 ||user|dp|code|辞書にものを並べてゆく際のポインタ, allotは`dp + !`と定義される。
+|x|!|code|(n addr --): addrにnを書き込む
+|x|@|code|(addr -- n): addrから読み込みスタックに置く
+|x|c!|code|(c addr --): addrにバイトcを書き込む
+|x|c@|code|(addr -- c): addrから1バイト読み込みスタックに置く
 |x|dict|;|word|コンパイルの終了
 |x|dict|[|code|コンパイルモードに入る(STATEを1増やす)
 |x|dict|]|code|コンパイルモードから抜ける(STATEを1減らす)
@@ -89,13 +93,12 @@ category:
 ||define|char|word|インタプリタ時に、次の1文字ワードの文字コードをスタックに置くコードを吐く。
 ||define|create .(1)..<br> DOES> .(2)..|word|DOES>は、CREATEされたワードの定義をいったん終了させて、その後ろに無名ワードの定義を開始する。<br>最初のワード先頭のトークンにSTATE値により飛び先を変える判断を置く。リターンスタックにそのオペランドを保持しておき、DOES>が出てきた時点でリターンスタックの値が指すオペランドの飛び先を確定させる。という感じかな。<br>(1)前半はコンパイル時の挙動、(2)後半は実行時の挙動を書く。実行時には定義されたワードのPFAがスタック上に置かれる。
 ||define|\>BODY|word|create ... does> ... ワードのCFAを取り、それに結びついた固有デンター領域のメモリアドレス(PFA?)を返す。
-|x|stack|dup|code|
-|x|stack|over|code|
-|x|stack|drop|code|
-|x|stack|swap|code|
-|x|stack|rot|code|
+|x|stack|dup|code|(n -- n n)
+|x|stack|over|code|(m n -- m n m)
+|x|stack|drop|code|(m n -- m)
+|x|stack|swap|code|(m n -- n m)
+|x|stack|rot|code|(l m n -- m n l)
 ||rstack|\>R|code| スタックトップをRSにプッシュ
-||rstack|R@|code|RSトップをデータスタックにプッシュ
 ||rstack|R\>|code|RSトップをスタックにプッシュ
 |x|print|.|code|
 ||print|?|code|
@@ -115,7 +118,7 @@ category:
 ||arith|minus|code|
 ||arith|abs|code|
 |x|arith|+|code|
-|x|arith|-|code|
+|x|arith|-|code|(m n -- (m - n))
 |x|arith|\*|code|
 |x|arith|/|code|
 ||arith|max|code|

@@ -45,15 +45,21 @@ __bufn:
     dc.w    0
 
     .section STACK
-    .org   0xfc00
+    .org   0xfa00
 stack_bottom:
     .space 256
     .global dsp_end
 dsp_end:
     .space 256
 rsp_end:
-    .space 256
+    .space 512
 sp_end:
+
+    .section FSOURCE
+    .org  0
+fsource_top:
+    dc.w    0
+
 
 /*
  * Forth interpreter initialize
@@ -95,6 +101,17 @@ initial_point:
     move.l   #sp_end,%a7       /* set stack pointer */
     move.l   #dsp_end,%a5        /* set DSP */
     move.l   #rsp_end,%a4       /* set RSP */
+/*
+ * forth file buffer
+ */
+initial_filebuffer:
+    move.l  #fsource_top,%a0
+    move.w  (%a0)+,%d0
+    and.w   %d0,%d0
+    beq     outer
+    /* fill getchar buffer */
+    move.w  %a0,(__bufp)
+    move.w  %d0,(__bufn)
 
 /*
  * outer interpreter 
@@ -156,6 +173,7 @@ do_compile:
     bra     outer1_1
 do_exec:
     move.l  %a1,%a0
+    /*jsr     (dump_entry)*/
     jsr     (execute)
     bra     outer1_1
 
@@ -265,25 +283,29 @@ do_exit:
     move.w  (%a4)+,%a6          /* pop IP from RSP */
     move.w  (%a6),%a0
     add.w   #2,%a6
+/*bp001:*/
     jmp     (%a0)
     .global do_next
 do_next:
     move.w  (%a6),%d0           /* 3 instructions equivalent to jmp  (%a6)+ */
     and.w   #0x3fff,%d0         /* clear precedence info */
     move.w  %d0,%a0
-    bra     do_next1
+    /*bra     do_next1*/
     /* trace word list execution */
     move.l  %a0,-(%a7)
-    jsr     (dump_entry)        /* for debugging */
     move.b  #':',%d0
     jsr     (putch)
     move.b  #' ',%d0
     jsr     (putch)
     jsr     (dump_stack)
+    move.b  #'>',%d0
+    jsr     (putch)
     jsr     (crlf)
     move.l  (%a7)+,%a0
 do_next1:
     add.w   #2,%a6
+
+   /* jsr     (dump_entry) */
     jmp     (%a0)               /* exec next token */
 
 /* virtual machine instruction */
@@ -365,6 +387,7 @@ do_system0:
  */
     .global  putch
 putch:
+    bra     putch_xx
     move.w  %d0,-(%a7)          /*  push %d0 */
     move.l  %a0,-(%a7)
     move.l  #uart_creg,%a0    
@@ -375,7 +398,13 @@ putch1:
     /*  now TXBUF be ready */
     move.l  (%a7)+,%a0
     move.w  (%a7)+,%d0         /*  pop %d0 */
+putch_xx:
     move.b  %d0,(uart_dreg)
+    nop
+    nop
+    nop
+    nop
+    nop
     rts
 /*
  * getch ... get one char in %d0
@@ -989,11 +1018,47 @@ sample:
  */
 dump_entry:
     move.l  %a0,-(%a7)
+    move.w  %d1,-(%a7)
     move.w  %a6,%d0
+    sub.w   #2,%d0
     jsr     (puthex4)
     jsr     (space)
+    /* check if dict area or not */
+    move.w  %a0,%d0
+    sub.w   #0x2000,%d0
+    bmi     dump_e_4
+    /* search backword to find top-of-entry */
+dump_e_3:
+    move.w  -(%a0),%d0
+    and.w   #0x8000,%d0
+    beq     dump_e_3
     move.w  %a0,%d0
     jsr     (puthex4)
+    jsr     (space)
+    /* dump dict name entry */
+    move.b  (%a0)+,%d1
+    and.b   #0x1f,%d1
+    beq     dump_e_1
+    move.b  #'(',%d0
+    jsr     (putch)
+dump_e_2:
+    move.b  (%a0)+,%d0
+    jsr     (putch)
+    add.b   #-1,%d1
+    bne     dump_e_2
+    move.b  #')',%d0
+    jsr     (putch)
+    bra     dump_e_1
+dump_e_4:
+    /* dump address */
+    move.b  #'[',%d0
+    jsr     (putch)
+    move.w  %a0,%d0
+    jsr     (puthex4)
+    move.b  #']',%d0
+    jsr     (putch)
+dump_e_1:
+    move.w  (%a7)+,%d1
     move.l  (%a7)+,%a0
     rts
-    
+
