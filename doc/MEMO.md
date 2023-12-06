@@ -1263,11 +1263,150 @@ word ; semicolon immediate
 * これで倍精度32bit までの整数変換ができる。
 * 単長倍長の切替: 上位16bitが0000 or FFFFだけでなく、下位16bitのMSB(符号)も考える必要があった。
 
+#### ワード`DUMP`
+
+を作った。
+```
+(addr -- addr+16)
+```
+アドレスから16バイトをダンプして、スタックに新たなアドレスを置く。
+
+これにより連続して`dump`をたたけば順次見える
+
+### 条件文、ループ
+
+`INTERPRET`が見えてきた。まず条件文とループを作る。
 
 
 
 
+#### ワード`INTERPRET`
 
+```
+(find the word) IF (convert to a number)
+                ELSE (execute the word)
+                THEN
+```
+* ワードを辞書で検索し、見つからなければ NUMBER に変換しようとする。
+* 見つかればそれをEXECUTEする。
+* IFに与える条件が逆ではないか？
+
+#### ワード`QUIT`
+
+```
+: QUIT BEGIN (clear return stack) (accept input)
+INTERPRET ." ok " CR 0 UNTIL ;
+```
+
+* まず`BEGIN`, `UNTIL`が必要ですね。`IF`, `ELSE`, `THEN`も作る。
+* ABORTはQUITを呼び出す。抜けるというよりはキャンセルして新しいループを回すという感じですね。
+
+### ワード'(tick)
+
+辞書を検索し、存在すればCFAを返す。なければABORT"を実行する。
+
+> ということで、ABORT"が先に必要。ABORT"はQUITを呼び出すので、INTERPRETが必要。
+
+### `<BUILD`, `DOES>`の実装
+
+microForthマニュアル(microForth_Tech_Manual_1802.pdf)に記述があった。
+
+```
+    : [name] <BUILD [words to be executed at compile time]
+        DOES> [words to be executed as the definition of the defined word] ;
+```
+
+例として
+
+```
+    : MSG <BUILD DOES> COUNT TYPE ;
+    HEX MSG SPACE 1 C, 20 C, DECIMAL
+```
+
+MSGは定義語で、ASCII文字列を印字するワードを定義するために用いる。SPACEはMSGにより定義されたワードで、空白文字1文字を出力する。`1 C,`, `2 C,`は文字カウント1, ASCII空白文字(20)1文字 を辞書内部に構築する。図12は辞書エントリDOES>, MSG, SPACEの定義を表す。
+
+<figure>
+<img width=600, src="img/01-build-does-implementation.png">
+</figure>
+
+定義語`;CODE`と同様に、実行部分2つがある。MSGがSPACEを定義するときのものと、SPACE自身が実行されるときのものである。これら2つの高レベル定義は、MSGの定義の中に存在する。`DOES>`はMSGの実行を区切る。残りの句(COUNT TYPE ;)はMSGにより定義されたワード(例: SPACE)が実行されるときに呼び出される。
+
+`BUILD>`の定義は
+```
+    : <BUILD 0 CONSTANT ;
+```
+だけである。これは辞書エントリを生成し、パラメータフィールドに2バイトを予約する。あとで、`DOES>`がそこの2バイトにアドレスを格納する。SPACEの出力文字列(`1 C, 2 C,`で明示的にコンパイルされている)はそのアドレスの後ろ、つまり、パラメータフィールドの3バイト目から始まる。
+
+`DOES>`はMSGの実行を終了させる。それ以後の句(COUNT TYPE ;)はSPACEにより実行される。しかしながら、この句が実行される前に、パラメータフィールドの3バイト目のアドレスがスタックに置かれる。これはもちろん出力文字列の開始アドレスである。このアドレスはCOUNTの引数として使われる。COUNTはTYPEのパラメータを準備する。
+
+`DOES>`の定義は、
+```
+: DOES>   R> CURRENT @ @ n + ! ;CODE
+```
+の後ろに簡単に説明するコードが置かれる。上記の定義において、nはプロセッサ依存のリテラルで、`CURRENT @ @ n +`が、最近に生成されたエントリのパラメータフィールドへのアドレスを指すような値である。この場合、`<BUILD`により0がSPACEにコンパイルされる。(CURRENTは14章, VOCABLARIESで説明される)。この句の効果は、
+
+```
+    R> CURRENT @ @ n + !
+```
+は、`COUNT TYPE ;`句のアドレスを、SPACEのパラメータフィールドの2バイトに保存する。これはリターンスタックのトップを取り除く。MSGの実行の際の効果として。
+
+あとで、SPACEが呼び出されるとき、`DOES>`の;CODE句が実行される。このコード句は3つのことを行う。
+
+1. インタプリタポインタをリターンスタックに保存する。
+2. インタプリタポインタをリセットし、SPACEのパラメータフィールドの最初の2バイトの中に
+(続く)
+
+2. He sets the interpreter pointer with the address in the first two 
+bytes of the parameter field of SPACE, i.e., with the address of the 
+phrase COUNT TYPR; .
+
+3. Pushes the address of the third byte of the parameter field of 
+SPACE on the stack. This becomes the argument of COUtlT. 
+
+Another useful MSG is CR, defined in HEX by 
+```
+    MSG CR 6 C, DC, AC, 0 , 0 
+```
+The character count is 6, D and A are the ASClI codes for carriage return and line feed, respectively, and the It remaining null characters sent whenever CR is typed  are required for timing in some terminals and printers. 
+
+An extension of MSG which reads a string of text and gives it a name which may be used to type it out is STRING, defined (in decimal) by
+```
+    : STRING MSG 92 WOHD HERE ce 1+ H +! ;
+```
+MSG sets up the initial definition, as above. 92 is the ASCII code for \\ , which WORD takes off the stack as its delimiter. WORD puts the characters typed at the terminal following the name, until the occurrence of a \ , into the dictionary at HER£ but it doesn't advance H. HERE CO 1+ gives the length of the string, including the count byte. The H +! increments H by this value, thus enclosing the string in the dictionary. To use STRING, consider the definition of a word ERROR: 
+```
+    STRING ERROR BAD!!\ 
+```
+Thereafter use of the word ERROR would cause BAD!! to be typed out.
+
+> Note: DEFINITIONS SUCH AS THERE ARE WASTEFUL OF MEMORY ESPECIALLY FOR LONG TEXT STRINGS. On disk systems the use of MESSAGE, which keeps its text on disk, is preferred. This is, however, a good way to handle messages in applications that will not have a disk. 
+
+Another example of the use of `<BUILDS` and `DOES>` is the defining word FIELD, which is used to define fields in a data block on disk: 
+```
+    : FIELD  <BUILD C, DOES> C@ B# @ BLOCK + ;
+```
+Note that the word C, appears between the ref'erences to `<BUILDS` and `DOES>` in the above definitions. `<BUILDS` and `DOES>` are separate words for essentially this purpose, to allow the user to specify the implicit compilation of any size field to follow the definition being created before that definiti.on i.s cornpleLed by DOES>.  In this case C, compiles in the BLOCK offset that is later fetched by the C@.  Remember that words appearing between `<BUILDS` and `DOES>` will be executed when the new word is defined, whereas those words following `DOES>` are executed when the new word is used. 
+
+Given this definition, you might define FIELDS thus: 
+```
+    0 flELD NO. 1 £<'1ELD KIND 2 FIELD VALUE II FIELD OFFSET
+``` 
+etc. In use it is assumed that [3/J is a VARIABLE containing the nurnbet' of some dala block. Then VALUE would fetch the address of the third byte of the block ( in this case VALUE is assumed to be double length) c.1nd OFFSET would fetch the c.1cldress of the 5th byte. This b ;rnj_c concept can be expanded to some elaborate data file management capabilities.
+
+Consider an alternate definition of VECTOH ( with X, Y, an:l Z defined as above): 
+```
+    VECTOR <BUILDS DOES> + 
+```
+and the definition of a VECTOR: 
+```
+    VECTOR CORNER 100 C, 40 C, 
+```
+
+(Typing X CORNER CU puts 100 on the stack ~nd Y CORNRR C~ puts 40 on the stack.) 
+
+A comparison or this definition of VECTOH with the fl.rst one exhibit:-, tlle major differences between DOES> an:-1 ;COOE, namely that the use of high-level FORTH following DOES> is often more convenient than supplyi.ng code to follo1,i ;CODE.  This method is also more machine independent. 
+
+Hopefully, it has bt~en shown that different kinds of words may be usefully defined. Basic FORTH provides only CONSTANT and VARIABLE, but standard dcfinitlons of most of the words discussed here are available. If you encounter more than one instance of a p3rticular kind of word, or use such a word rrequently, it can pay orr in convenience, efficiency, and elegance, to name and characterize those properties that make it unique.
 
 ### 付録. Moore_74に挙げられた基本ワード
 

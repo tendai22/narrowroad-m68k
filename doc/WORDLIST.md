@@ -32,19 +32,20 @@ category:
 |x|i/o|kbhit|native
 |x|stream|getchar|native|行入力(_accept)を下位に持つ1文字入力ルーチン。wordが使用する。プロンプトの出力もここで行う。
 ||outer|interpret|word|外部インタプリタ。WORD, FIND, NUMBERのあと実行またはコンパイルの無限ループ
-|x|outer|word|word|入力ストリームから文字列を切り出し辞書末尾に置く。ワード定義の際はその位置でそのまま使える。
+|x|outer|word|word|入力ストリームから文字列を切り出し辞書末尾(here)に置く。ワード定義の際はその位置でそのまま使える。
 |x|outer|find|code|(c-addr -- 0\|xt 1\|xt -1): 切り出したワードを辞書検索する。現在は単一辞書を想定している。見つからなければ0を返す。<br>見つかれば1,-1(immediateワードの場合)の下にexecution tokenを返す。
 |x|outer|execute|code|ワードのCFAにジャンプする。コンパイルはinterpret内部で分岐処理する
-|x|outer|number|code|(addr -- n1 .. nn, n2): n2==0, fail, 1: single-precision, 2: double-precision。切り出したワードを数字に変換しスタックに載せる
+|x|outer|number|code|(addr -- n1 .. nn, n2): n2==0, fail, 1: single-precision, 2: double-precision。切り出したワードを数字に変換しスタックに載せる。
 ||outer|digit|code|(c base -- n t/f): ASCII文字1文字を数字に変換する。codes.s中のコードを辞書に切り出す。
+||outer|ok|code|( -- ): プロンプトを印字する。
 |x|outer|create|word|ストリームから1ワード入力し、辞書末尾に置く。
 |x|outer|lit|code|ワードリストに置かれる。数値をスタックに積む仮想機械命令
 |x|outer|bra|code|ワードリストに置かれる。無条件相対ブランチ
 |x|outer|bne|code|ワードリストに置かれる。条件付き相対ブランチ。非ゼロでジャンプする
-||outer|quit|code|リターンスタックをリセットし、入力をシステムコンソールにリダイレクトし、外部インタプリタを実行する。
+||outer|quit|code|リターンスタックをリセットし(データスタックはリセットしない)、入力をシステムコンソールにリダイレクトし、外部インタプリタを実行する。
 ||outer|abort|word|quitを呼び出す。
 ||outer|abort"|word|(x "<text>" --  ): 文字列をキー入力から読み取り、スタックトップの値がゼロであればそのまま進む(エラー扱いしない)。非ゼロであれば文字列を印字しquotを呼び出す。
-||outer|question|word|エラーメッセージ印字、最後のワード + `?`を印字する
+||outer|question|word|エラーメッセージ印字、最後のワード + `?`を印字する。両スタックを空にしてオペレータに制御を返す。OKは表示されない。
 ||outer|'(tick)|word|ワードをストリームから読み込み、辞書サーチして、execution tokenを返す
 |x|outer|execute|word|スタック上のexecution tokenを実行する。
 ||outer|_execute|code|executeの実体、%a0レジスタ渡し
@@ -73,7 +74,9 @@ category:
 ||dict|then|word|(優先度1)
 ||dict|do|word|(優先度1)(m n --), mはlimit, nはindexをリターンスタックに置く
 ||dict|?do|word|
-||dict|loop|word|(優先度1)
+||dict|leave|do .. ループを抜ける
+||dict|i|word|リターンスタック先頭をパラメータスタックにプッシュする。RSPは変更しない。
+||dict|loop|word|(優先度1)do ... loopの末尾を閉じる。インデックスをインクリメントし、インデックスがlimitと同じかそれ以上になれば抜ける。
 ||dict|begin|word|(優先度1)
 ||dict|again|word|(優先度1)
 ||dict|until|word|(優先度1)
@@ -96,7 +99,7 @@ category:
 ||rstack|R\>|code|RSトップをスタックにプッシュ
 |x|print|.|code|
 ||print|?|code|
-||print|count|word|文字列のcountフィールドを返す。
+||print|count|word|(addr -- addr+1 n)文字列のcountフィールドと本体のアドレスを返す。
 |x|print|emit|code|スタック上の値を印字する。
 ||print|type|word|(a n --): アドレスaから文字n個を印字する
 |x|print|decimal|word
@@ -105,6 +108,7 @@ category:
 ||input|key|code|キーボードからの1文字入力、いまはストリーム入力からの1文字と同一とする。
 ||input|key?|code|kbhit
 ||input|accept|code|(addr +n -- len): ストリーム入力をバッファに読み込み、読み込み長を返す。アセンブラ版を辞書に移動させる。実際はgetchar/keyで入力する。
+|-|input|expect|code|(addr +n -- ): acceptと同じ、ただし末尾に2バイトのnullを置く。本システムではacceptを使い、expectは使わない。
 ||input|S"|code|( -- caddr len): ダブルクォートのみの単語までの文字列を入力し、どこかのバッファに置く。とりあえず辞書末尾かな。
 ||input|C"|code|( -- caddr): 長さ付文字列をバッファに置く。とりあえず辞書末尾(DP)。
 ||string|count|word|(caddr -- caddr+1 length): 長さ付文字列を入力とし、文字列本体と長さをスタックに積む。
