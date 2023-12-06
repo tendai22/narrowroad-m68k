@@ -5,7 +5,7 @@ POLだけでなく、Moore74, Starting-Forth, Programming Forth(Stephjen Pelc, 2
 type:
 * native: 辞書に書かない。`codes.s`内の機械語ルーチン
 * code: 辞書に書く機械語ワード、nextで内部インタプリタにジャンプする。
-* word: 辞書に書くワードリストのワード、IPが順次各ワードのCFA(通常listルーチン)にジャンプしてゆく。最後はexitでIPを戻して呼び出し元に戻る。
+ * word: 辞書に書くワードリストのワード、IPが順次各ワードのCFA(通常listルーチン)にジャンプしてゆく。最後はexitでIPを戻して呼び出し元に戻る。
 
 category:
 * inner: 内部インタプリタ
