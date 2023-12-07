@@ -242,6 +242,10 @@ check_if_compile:
     and.b   #3,%d1
     and.w   #0xff,%d1       /* word extension */
     move.w  (__state),%d0
+    and.w   %d0,%d0
+    beq     check_if2
+    nop
+check_if2:
     sub.w   %d1,%d0
     bgt     check_if1   /* jmp(plus) then compile, one or exec if zero */
     /* if plus(%d1 < %d0), compile, else execute */
@@ -288,9 +292,9 @@ do_exit:
     .global do_next
 do_next:
     move.w  (%a6),%d0           /* 3 instructions equivalent to jmp  (%a6)+ */
-    and.w   #0x3fff,%d0         /* clear precedence info */
     move.w  %d0,%a0
     bra     do_next1
+    jsr     (dump_entry)
     /* trace word list execution */
     move.l  %a0,-(%a7)
     move.b  #':',%d0
@@ -305,7 +309,6 @@ do_next:
 do_next1:
     add.w   #2,%a6
 
-   /* jsr     (dump_entry) */
     jmp     (%a0)               /* exec next token */
 
 /* virtual machine instruction */
@@ -328,7 +331,9 @@ do_cexit:
     move.w  (%a7)+,%a5
     move.w  (%a7)+,%a4
     bra.b   do_next
-/* branch */
+/*
+ * branch
+ */
     .global do_bne
 do_bne:
     move.w  (%a5)+,%d0
@@ -336,9 +341,18 @@ do_bne:
     bne.w   do_bra
     add.w   #2,%a6
     bra.w   do_next
+
+    .global do_beq
+do_beq:
+    move.w  (%a5)+,%d0
+    and.w   %d0,%d0
+    beq.w   do_bra
+    add.w   #2,%a6
+    bra.w   do_next
+
     .global do_bra
 do_bra:
-    add.w   (%a6)+,%a6
+    add.w   (%a6),%a6
     bra.w   do_next
 
 /* stack dump */

@@ -14,7 +14,10 @@ TMPS=dict.s a.dict a.out a.symbols codes.list dict.list
 .s.o:
 	$(AS) -a=$*.list -o $*.o $*.s
 
-all: $(NAME).X bp.X $(NAME).dict $(NAME).list
+.f.X:
+	./f2x -o $*.X $*.f
+
+all: $(NAME).X bp.X $(NAME).dict $(NAME).list forth.X
 
 a.out:  $(OBJS)
 	$(LD) -T trip.ldscript $(OBJS)
@@ -30,6 +33,9 @@ $(NAME).X: a.out
 
 bp.X: a.out
 	sh extract_bp.sh > bp.X
+
+forth.X: forth.f
+	./f2x -o forth.X forth.f
 
 dict.s:  base.dict makedict.sh
 	sh makedict.sh > dict.s

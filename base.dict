@@ -184,10 +184,6 @@ do_num_end:
     move.w  (%a7)+,%d3
     endcode
 
-code xxx
-bp001:
-    nop
-    endcode
 //
 // return stack
 //
@@ -200,57 +196,94 @@ code r> popr
     endcode
 
 //
-// ,(comma) ... put a word to the dict entry
+// compile .. put next word in the list to code dictionary
+//
+word compile immediate
+    popr
+    dup
+    atfetch     // get the next word from the word-list
+    comma       // put it to the dict entry
+
+    cell_inc    // skip ip (return pointer to skip the next word)
+    pushr
+    endword
+//
+// CELL+, CELL-
+//
+word cell+ cell_inc
+    lit 2
+    add
+    endword
+word cell- cell_dec
+    lit 2
+    sub
+    endword
+//
+// ,(comma) ... put a word to the dict entry, cell_inc to (here_addr)
 //
 code , comma
     eor.l   %d0,%d0
     move.w  (here_addr),%d0
     move.l  %d0,%a0
-    move.w  (%a5)+,(%a0)
+    move.w  (%a5)+,(%a0)+
+    move.w  %a0,(here_addr)
+    endcode
+
+code break immediate
+bp009:
+    nop
     endcode
 //
 // IF ... ELSE ... THEN
 //
 word if immediate
     // put `do_bne`
-    lit bne
+    lit beq
     comma               // put `do_bne` to dict
-    lit 2
-    allot               // +2 h
     // save operand addr
     here                // get dict poiner
-    pushr               // save operand address
-    lit 2
-    allot
+    lit 0
+    comma
     endword
+
 word else immediate
     // put `do_bra`
     lit bra
     comma
-    lit 2
-    allot
     // restore rstack top
-    here
-    pushr               // here -> rstack
+    here    // push operand addr
+    lit 0   // dummy operand value
+    comma
+    swap    // exchange to get previous branch operand addr
     then
     endword
 
-word then immediate
+word then level2
+    dup
     here
-    // (here)
-    popr
-    // (here prev-addr)
+    // (A A here)
     swap
-    // (prev-addr here)
-    over
-    // (prev-addr here prev-addr)
     sub
-    // (prev-addr offset)
+    // (A offset(here - (A + 2)))
     swap
-    // (offset prev-addr)
+    // (offset A)
     exclamation
-    lit 2
-    allot
+    endword
+
+word : colon
+    create
+    put_link
+    put_list
+    start_compile
+    endword
+
+word ; semicolon immediate
+    end_compile
+    lit #do_exit
+    comma
+    // tos is current entry top
+    last
+    exclamation     // change last
     endword
 
 /*
@@ -679,25 +712,6 @@ word put_link
     exclamation     // put it on the entry body
     lit 2
     allot
-    endword
-
-word : colon
-    create
-    put_link
-    put_list
-    start_compile
-    endword
-
-word ; semicolon immediate
-    end_compile
-    lit #do_exit
-    here
-    exclamation
-    lit 2
-    allot
-    // tos is current entry top
-    last
-    exclamation     // change last
     endword
 
 word test2

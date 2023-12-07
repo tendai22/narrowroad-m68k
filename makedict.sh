@@ -49,6 +49,8 @@ BEGIN {
             name = $3
         } else if ($3 ~ /immediate/) {
             precedence = 32
+        } else if ($3 ~ /level2/) {
+            precedence = 64
         } else {
             name = $3
         }
