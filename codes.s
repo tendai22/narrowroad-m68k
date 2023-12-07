@@ -290,7 +290,7 @@ do_next:
     move.w  (%a6),%d0           /* 3 instructions equivalent to jmp  (%a6)+ */
     and.w   #0x3fff,%d0         /* clear precedence info */
     move.w  %d0,%a0
-    /*bra     do_next1*/
+    bra     do_next1
     /* trace word list execution */
     move.l  %a0,-(%a7)
     move.b  #':',%d0
@@ -387,7 +387,6 @@ do_system0:
  */
     .global  putch
 putch:
-    bra     putch_xx
     move.w  %d0,-(%a7)          /*  push %d0 */
     move.l  %a0,-(%a7)
     move.l  #uart_creg,%a0    
@@ -398,13 +397,7 @@ putch1:
     /*  now TXBUF be ready */
     move.l  (%a7)+,%a0
     move.w  (%a7)+,%d0         /*  pop %d0 */
-putch_xx:
     move.b  %d0,(uart_dreg)
-    nop
-    nop
-    nop
-    nop
-    nop
     rts
 /*
  * getch ... get one char in %d0
