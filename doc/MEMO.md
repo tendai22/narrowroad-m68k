@@ -351,78 +351,6 @@ word branch
 
 プログラマが打ち込むプログラムでは使わない。辞書エントリとしては存在しないが、終了時 next/exitにジャンプする。
 
-### Musashiエミュレータが突然ハングする
-
-シリアルポート出力(当然エミュレーション)を繰り返すとハングする。長いシーケンスをデバッグ情報を出しながら実行させると完了する前に止まってしまう。
-
-ふと思いついて、ミリ秒クロック情報取り出しの部分が「回っている」のではないかと考えた。unsigned long int で扱っているにしても、符号なし整数の上限を越えると、前の時刻との差分を取ると、以前の値より小さな値になるときがくる。
-
-`Musashi`の内部処理では、`get_msec`関数を呼び出すと、その時点の時刻をミリ秒単位で返す。内部ループではタイマ処理をこの時刻の差分で計算している。
-
-`get_msec`関数の返す値が「巻き戻る」と差分が負になる、または(符号なし整数で受ける場合)非常に大きな値になってしまう。タイマが一瞬で発動するか、非常に長時間待つかになってしまい、期待通りの挙動を示さない。
-
-今までは、
-```
-	struct timespec ts;
-	static unsigned long int start = 0, current;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-```
-で現在時刻を採取し、そのうちのナノ秒部分を返していた。
-
-`clock_gettime`関数の仕様・挙動を調べた結果、以下のことが分かった。
-
-* 呼び出し時点の時刻データを返す。
-* 2要素の構造体に値をセットしてくれる。
-* 2要素とは、
-  + tv.ts_sec: 1秒単位の時刻を返す。
-  + tv.ts_nsec: ナノ秒単位の部分を返す。
-* ナノ秒部分の値は、0 ～ 999999999L までで、これを越えるとゼロに巻き戻る
-
-なので、今までの「ナノ秒部分を返す」だと、1秒に1回巻き戻ってしまう。この頻度で巻き戻しが起こると何が起こるかわからない。ハングしても無理ないと思われる。
-
-tv_sec要素の値を無視しているからおかしなことになる。`ts.tv_sec * 10^9 + ts.tv_nsec`でナノ秒単位の積算値が取れる。これを`unsigned long int`で受けてミリ秒単位にすると、
-```
-UINT_MAX = 4294967295
-UINT_MAX / 1000 = 4294967
-UINT_MAX / 1000000 = 4294`
-```
-420万秒 == 49.7日である。
-
-実験用のエミュレータを起動直後から50日連続で運転することはないとしてもいいだろう。ここに手を入れるとなると、エミュレータ本体の時刻差計算部分をすべて改修することになり、それはちょっと大変である。
-
-ということで、tv_sec, tv_nsec両方使ってミリ秒換算した値(起動時時刻を保存し、起動時をゼロになるように換算している)を使うことで挙動が改善されることが期待できる。
-
-```
-long int get_msec(void)
-{
-	struct timespec ts;
-	static unsigned long int start = 0, current;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	current = (unsigned long int)ts.tv_sec * 1000L + ts.tv_nsec / 1000000L; 
-	if (start == 0) {
-		start = current;
-	}
-	return current - start;
-}
-```
-
-Forthインタプリタで、無限ループで`a`を印字するワード`test2`を作り実行させると、いままでは数百文字でハングしていたところがしなくなった。
-
-```
-word test2
-test2_1:
-    lit 0x61
-    emit
-    bra test2_1
-    endword
-```
-
-これで一件落着とする。
-
-### コロン定義するとインタプリタが手打ちワードを実行しなくなる(12/7)
-
-`: aho 1 + ;`を入れたforth.fを含めた状態でバイナリをアップロードすると、
-定義は完了するようになったが、プロンプトが帰ってきて`aho`, `dump`と叩いても動作しない。ワードは識別しているようだが動作が何もおきない。次のデバッグはこれをつぶす。
 
 ### 解説: 辞書エントリ
 
@@ -1427,104 +1355,7 @@ INTERPRET ." ok " CR 0 UNTIL ;
 
 ### `<BUILD`, `DOES>`の実装
 
-microForthマニュアル(microForth_Tech_Manual_1802.pdf)に記述があった。
-
-```
-    : [name] <BUILD [words to be executed at compile time]
-        DOES> [words to be executed as the definition of the defined word] ;
-```
-
-例として
-
-```
-    : MSG <BUILD DOES> COUNT TYPE ;
-    HEX MSG SPACE 1 C, 20 C, DECIMAL
-```
-
-MSGは定義語で、ASCII文字列を印字するワードを定義するために用いる。SPACEはMSGにより定義されたワードで、空白文字1文字を出力する。`1 C,`, `2 C,`は文字カウント1, ASCII空白文字(20)1文字 を辞書内部に構築する。図12は辞書エントリDOES>, MSG, SPACEの定義を表す。
-
-<figure>
-<img width=600, src="img/01-build-does-implementation.png">
-</figure>
-
-定義語`;CODE`と同様に、実行部分2つがある。MSGがSPACEを定義するときのものと、SPACE自身が実行されるときのものである。これら2つの高レベル定義は、MSGの定義の中に存在する。`DOES>`はMSGの実行を区切る。残りの句(COUNT TYPE ;)はMSGにより定義されたワード(例: SPACE)が実行されるときに呼び出される。
-
-`BUILD>`の定義は
-```
-    : <BUILD 0 CONSTANT ;
-```
-だけである。これは辞書エントリを生成し、パラメータフィールドに2バイトを予約する。あとで、`DOES>`がそこの2バイトにアドレスを格納する。SPACEの出力文字列(`1 C, 2 C,`で明示的にコンパイルされている)はそのアドレスの後ろ、つまり、パラメータフィールドの3バイト目から始まる。
-
-`DOES>`はMSGの実行を終了させる。それ以後の句(COUNT TYPE ;)はSPACEにより実行される。しかしながら、この句が実行される前に、パラメータフィールドの3バイト目のアドレスがスタックに置かれる。これはもちろん出力文字列の開始アドレスである。このアドレスはCOUNTの引数として使われる。COUNTはTYPEのパラメータを準備する。
-
-`DOES>`の定義は、
-```
-: DOES>   R> CURRENT @ @ n + ! ;CODE
-```
-の後ろに簡単に説明するコードが置かれる。上記の定義において、nはプロセッサ依存のリテラルで、`CURRENT @ @ n +`が、最近に生成されたエントリのパラメータフィールドへのアドレスを指すような値である。この場合、`<BUILD`により0がSPACEにコンパイルされる。(CURRENTは14章, VOCABLARIESで説明される)。この句の効果は、
-
-```
-    R> CURRENT @ @ n + !
-```
-は、`COUNT TYPE ;`句のアドレスを、SPACEのパラメータフィールドの2バイトに保存する。これはリターンスタックのトップを取り除く。MSGの実行の際の効果として。
-
-あとで、SPACEが呼び出されるとき、`DOES>`の;CODE句が実行される。このコード句は3つのことを行う。
-
-1. インタプリタポインタをリターンスタックに保存する。
-2. インタプリタポインタをリセットし、SPACEのパラメータフィールドの最初の2バイトの中に
-(続く)
-
-2. He sets the interpreter pointer with the address in the first two 
-bytes of the parameter field of SPACE, i.e., with the address of the 
-phrase COUNT TYPR; .
-
-3. Pushes the address of the third byte of the parameter field of 
-SPACE on the stack. This becomes the argument of COUtlT. 
-
-Another useful MSG is CR, defined in HEX by 
-```
-    MSG CR 6 C, DC, AC, 0 , 0 
-```
-The character count is 6, D and A are the ASClI codes for carriage return and line feed, respectively, and the It remaining null characters sent whenever CR is typed  are required for timing in some terminals and printers. 
-
-An extension of MSG which reads a string of text and gives it a name which may be used to type it out is STRING, defined (in decimal) by
-```
-    : STRING MSG 92 WOHD HERE ce 1+ H +! ;
-```
-MSG sets up the initial definition, as above. 92 is the ASCII code for \\ , which WORD takes off the stack as its delimiter. WORD puts the characters typed at the terminal following the name, until the occurrence of a \ , into the dictionary at HER£ but it doesn't advance H. HERE CO 1+ gives the length of the string, including the count byte. The H +! increments H by this value, thus enclosing the string in the dictionary. To use STRING, consider the definition of a word ERROR: 
-```
-    STRING ERROR BAD!!\ 
-```
-Thereafter use of the word ERROR would cause BAD!! to be typed out.
-
-> Note: DEFINITIONS SUCH AS THERE ARE WASTEFUL OF MEMORY ESPECIALLY FOR LONG TEXT STRINGS. On disk systems the use of MESSAGE, which keeps its text on disk, is preferred. This is, however, a good way to handle messages in applications that will not have a disk. 
-
-Another example of the use of `<BUILDS` and `DOES>` is the defining word FIELD, which is used to define fields in a data block on disk: 
-```
-    : FIELD  <BUILD C, DOES> C@ B# @ BLOCK + ;
-```
-Note that the word C, appears between the ref'erences to `<BUILDS` and `DOES>` in the above definitions. `<BUILDS` and `DOES>` are separate words for essentially this purpose, to allow the user to specify the implicit compilation of any size field to follow the definition being created before that definiti.on i.s cornpleLed by DOES>.  In this case C, compiles in the BLOCK offset that is later fetched by the C@.  Remember that words appearing between `<BUILDS` and `DOES>` will be executed when the new word is defined, whereas those words following `DOES>` are executed when the new word is used. 
-
-Given this definition, you might define FIELDS thus: 
-```
-    0 flELD NO. 1 £<'1ELD KIND 2 FIELD VALUE II FIELD OFFSET
-``` 
-etc. In use it is assumed that [3/J is a VARIABLE containing the nurnbet' of some dala block. Then VALUE would fetch the address of the third byte of the block ( in this case VALUE is assumed to be double length) c.1nd OFFSET would fetch the c.1cldress of the 5th byte. This b ;rnj_c concept can be expanded to some elaborate data file management capabilities.
-
-Consider an alternate definition of VECTOH ( with X, Y, an:l Z defined as above): 
-```
-    VECTOR <BUILDS DOES> + 
-```
-and the definition of a VECTOR: 
-```
-    VECTOR CORNER 100 C, 40 C, 
-```
-
-(Typing X CORNER CU puts 100 on the stack ~nd Y CORNRR C~ puts 40 on the stack.) 
-
-A comparison or this definition of VECTOH with the fl.rst one exhibit:-, tlle major differences between DOES> an:-1 ;COOE, namely that the use of high-level FORTH following DOES> is often more convenient than supplyi.ng code to follo1,i ;CODE.  This method is also more machine independent. 
-
-Hopefully, it has bt~en shown that different kinds of words may be usefully defined. Basic FORTH provides only CONSTANT and VARIABLE, but standard dcfinitlons of most of the words discussed here are available. If you encounter more than one instance of a p3rticular kind of word, or use such a word rrequently, it can pay orr in convenience, efficiency, and elegance, to name and characterize those properties that make it unique.
+microForthマニュアル(microForth_Tech_Manual_1802.pdf)に記述があった。付録参照。
 
 ### そろそろForthプログラムを読み込む機能を作ろう
 
@@ -1540,8 +1371,78 @@ Hopefully, it has bt~en shown that different kinds of words may be usefully defi
 
 なぞである。堕ちる場所がいろいろになっている。
 
+### Musashiエミュレータが突然ハングするのを直す(12/7)
 
+シリアルポート出力(当然エミュレーション)を繰り返すとハングする。長いシーケンスをデバッグ情報を出しながら実行させると完了する前に止まってしまう。
 
+ふと思いついて、ミリ秒クロック情報取り出しの部分が「回っている」のではないかと考えた。unsigned long int で扱っているにしても、符号なし整数の上限を越えると、前の時刻との差分を取ると、以前の値より小さな値になるときがくる。
+
+`Musashi`の内部処理では、`get_msec`関数を呼び出すと、その時点の時刻をミリ秒単位で返す。内部ループではタイマ処理をこの時刻の差分で計算している。
+
+`get_msec`関数の返す値が「巻き戻る」と差分が負になる、または(符号なし整数で受ける場合)非常に大きな値になってしまう。タイマが一瞬で発動するか、非常に長時間待つかになってしまい、期待通りの挙動を示さない。
+
+今までは、
+```
+	struct timespec ts;
+	static unsigned long int start = 0, current;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+```
+で現在時刻を採取し、そのうちのナノ秒部分を返していた。
+
+`clock_gettime`関数の仕様・挙動を調べた結果、以下のことが分かった。
+
+* 呼び出し時点の時刻データを返す。
+* 2要素の構造体に値をセットしてくれる。
+* 2要素とは、
+  + tv.ts_sec: 1秒単位の時刻を返す。
+  + tv.ts_nsec: ナノ秒単位の部分を返す。
+* ナノ秒部分の値は、0 ～ 999999999L までで、これを越えるとゼロに巻き戻る
+
+なので、今までの「ナノ秒部分を返す」だと、1秒に1回巻き戻ってしまう。この頻度で巻き戻しが起こると何が起こるかわからない。ハングしても無理ないと思われる。
+
+tv_sec要素の値を無視しているからおかしなことになる。`ts.tv_sec * 10^9 + ts.tv_nsec`でナノ秒単位の積算値が取れる。これを`unsigned long int`で受けてミリ秒単位にすると、
+```
+UINT_MAX = 4294967295
+UINT_MAX / 1000 = 4294967
+UINT_MAX / 1000000 = 4294`
+```
+420万秒 == 49.7日である。
+
+実験用のエミュレータを起動直後から50日連続で運転することはないとしてもいいだろう。ここに手を入れるとなると、エミュレータ本体の時刻差計算部分をすべて改修することになり、それはちょっと大変である。
+
+ということで、tv_sec, tv_nsec両方使ってミリ秒換算した値(起動時時刻を保存し、起動時をゼロになるように換算している)を使うことで挙動が改善されることが期待できる。
+
+```
+long int get_msec(void)
+{
+	struct timespec ts;
+	static unsigned long int start = 0, current;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	current = (unsigned long int)ts.tv_sec * 1000L + ts.tv_nsec / 1000000L; 
+	if (start == 0) {
+		start = current;
+	}
+	return current - start;
+}
+```
+
+Forthインタプリタで、無限ループで`a`を印字するワード`test2`を作り実行させると、いままでは数百文字でハングしていたところがしなくなった。
+
+```
+word test2
+test2_1:
+    lit 0x61
+    emit
+    bra test2_1
+    endword
+```
+
+これで一件落着とする。
+
+### コロン定義するとインタプリタが手打ちワードを実行しなくなる(12/7)
+
+`: aho 1 + ;`を入れたforth.fを含めた状態でバイナリをアップロードすると、
+定義は完了するようになったが、プロンプトが帰ってきて`aho`, `dump`と叩いても動作しない。ワードは識別しているようだが動作が何もおきない。次のデバッグはこれをつぶす。
 
 ### 付録. Moore_74に挙げられた基本ワード
 
@@ -1629,4 +1530,100 @@ Words concerned with the interpreter:
 |;CODE|End compilation and begin assembling code.
 | EOT|End of input message from terminal. Await input and continue compilation.
 |||
+
+## 付録: `<BUILD`, `DOES>`の実装
+
+
+```
+    : [name] <BUILD [words to be executed at compile time]
+        DOES> [words to be executed as the definition of the defined word] ;
+```
+
+例として
+
+```
+    : MSG <BUILD DOES> COUNT TYPE ;
+    HEX MSG SPACE 1 C, 20 C, DECIMAL
+```
+
+MSGは定義語で、ASCII文字列を印字するワードを定義するために用いる。SPACEはMSGにより定義されたワードで、空白文字1文字を出力する。`1 C,`, `2 C,`は文字カウント1, ASCII空白文字(20)1文字 を辞書内部に構築する。図12は辞書エントリDOES>, MSG, SPACEの定義を表す。
+
+<figure>
+<img width=600, src="img/01-build-does-implementation.png">
+</figure>
+
+定義語`;CODE`と同様に、実行部分2つがある。MSGがSPACEを定義するときのものと、SPACE自身が実行されるときのものである。これら2つの高レベル定義は、MSGの定義の中に存在する。`DOES>`はMSGの実行を区切る。残りの句(COUNT TYPE ;)はMSGにより定義されたワード(例: SPACE)が実行されるときに呼び出される。
+
+`BUILD>`の定義は
+```
+    : <BUILD 0 CONSTANT ;
+```
+だけである。これは辞書エントリを生成し、パラメータフィールドに2バイトを予約する。あとで、`DOES>`がそこの2バイトにアドレスを格納する。SPACEの出力文字列(`1 C, 2 C,`で明示的にコンパイルされている)はそのアドレスの後ろ、つまり、パラメータフィールドの3バイト目から始まる。
+
+`DOES>`はMSGの実行を終了させる。それ以後の句(COUNT TYPE ;)はSPACEにより実行される。しかしながら、この句が実行される前に、パラメータフィールドの3バイト目のアドレスがスタックに置かれる。これはもちろん出力文字列の開始アドレスである。このアドレスはCOUNTの引数として使われる。COUNTはTYPEのパラメータを準備する。
+
+`DOES>`の定義は、
+```
+: DOES>   R> CURRENT @ @ n + ! ;CODE
+```
+の後ろに簡単に説明するコードが置かれる。上記の定義において、nはプロセッサ依存のリテラルで、`CURRENT @ @ n +`が、最近に生成されたエントリのパラメータフィールドへのアドレスを指すような値である。この場合、`<BUILD`により0がSPACEにコンパイルされる。(CURRENTは14章, VOCABLARIESで説明される)。この句の効果は、
+
+```
+    R> CURRENT @ @ n + !
+```
+は、`COUNT TYPE ;`句のアドレスを、SPACEのパラメータフィールドの2バイトに保存する。これはリターンスタックのトップを取り除く。MSGの実行の際の効果として。
+
+あとで、SPACEが呼び出されるとき、`DOES>`の;CODE句が実行される。このコード句は3つのことを行う。
+
+1. インタプリタポインタをリターンスタックに保存する。
+2. インタプリタ・ポインタをSPACEのパラメータ・フィールドの最初の2バイトのアドレス、すなわちCOUNT TYPE;というフレーズのアドレスでリセットする。
+3. SPACEのパラメータ・フィールドの3バイト目のアドレスをスタックにプッシュする。これがCOUNTの引数になる。
+
+Another useful MSG is CR, defined in HEX by 
+
+MSGが有効なもう一つの例は`CR`である。HEXの状態で、以下のように定義される。
+```
+    MSG CR 6 C, DC, AC, 0 , 0 
+```
+
+文字数は6で、DとAはそれぞれキャリッジリターンとラインフィードを表すASClIコードで、CRがタイプされるたびに送られる残りのヌル文字は、一部の端末やプリンターでタイミングをとるために必要である。
+
+MSGの拡張で、文字列を読み取り、それをタイプアウトするために使用できる名前を与えるものはSTRINGであり、（10進数で）次のように定義される。
+```
+    : STRING MSG 92 WOHD HERE C@ 1+ H +! ;
+```
+MSGは上記のように最初の定義を設定する。92は、WORDが区切り文字としてスタックから取り出す"˶"のASCIIコード。WORDは、名前に続く端末で入力された文字を、"\\"が出現するまでHEREの辞書に入れるが、Hは進めない。HERE C@ 1+は、カウントバイトを含む文字列の長さを与える。H+！はHをこの値だけインクリメントし、文字列を辞書に含める。STRINGの使い方として、単語ERRORの定義を考えてみよう：
+```
+    STRING ERROR BAD!!\ 
+```
+その後、ERRORという言葉を使うと、BAD!!!とタイプアウトしてしまう。
+
+> 注意：このような定義は、特に長い文字列の場合、メモリを浪費する。ディスク・システムでは、テキストをディスク上に保持する`MESSAGE`を使用するのが好ましい。しかし、これはディスクを持たないアプリケーションでメッセージを扱うには良い方法です。
+
+`<BUILDS>`と`DOES>`のもう一つの使用例は定義語の`FIELD`で、これはディスク上のデータブロックのフィールドを定義するために使用されます：
+```
+    : FIELD  <BUILD C, DOES> C@ B# @ BLOCK + ;
+```
+上記の定義において、`<BUILDS` と `DOES>` の間に `C,` という単語があることに注意してください。`<BUILDS>`と`DOES>`は本質的にこの目的のための別の単語であり、ユーザーが定義が`DOES>`によって完結される前に、作成される定義に続く任意のサイズフィールドの暗黙のコンパイルを指定できるようにするためのものである。 この場合、Cは後に`C@`によってフェッチされるBLOCKオフセットでコンパイルされる。 `<BUILDS`と`DOES>`の間に現れる単語は新しい単語が定義されたときに実行され、`DOES>`に続く単語は新しい単語が使われたときに実行されることを覚えておいてください。
+
+このように定義すると、`FIELDS`をこう定義することができる：
+```
+    0 flELD NO. 1 £<'1ELD KIND 2 FIELD VALUE II FIELD OFFSET
+``` 
+etc. In use it is assumed that `B#` is a VARIABLE containing the number of some data block. Then VALUE would fetch the address of the third byte of the block ( in this case VALUE is assumed to be double length) and OFFSET would fetch the address of the 5th byte. This basic concept can be expanded to some elaborate data file management capabilities.
+
+Consider an alternate definition of VECTOH ( with X, Y, and Z defined as above): 
+```
+    VECTOR <BUILDS DOES> + ;
+```
+and the definition of a VECTOR: 
+```
+    VECTOR CORNER 100 C, 40 C, 
+```
+
+(Typing X CORNER C@ puts 100 on the stack ~nd Y CORNRR C~ puts 40 on the stack.) 
+
+A comparison or this definition of VECTOH with the fl.rst one exhibit:-, tlle major differences between DOES> an:-1 ;COOE, namely that the use of high-level FORTH following DOES> is often more convenient than supplyi.ng code to follo1,i ;CODE.  This method is also more machine independent. 
+
+Hopefully, it has bt~en shown that different kinds of words may be usefully defined. Basic FORTH provides only CONSTANT and VARIABLE, but standard dcfinitlons of most of the words discussed here are available. If you encounter more than one instance of a p3rticular kind of word, or use such a word rrequently, it can pay orr in convenience, efficiency, and elegance, to name and characterize those properties that make it unique.
 
