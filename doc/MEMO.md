@@ -1546,6 +1546,9 @@ Words concerned with the interpreter:
 
 ## 付録: `<BUILD`, `DOES>`の実装
 
+> microForth TECHNICAL MANUAL, August 1978(Version 3 for RCA COSMAC)の13.2章の記載に基づく 
+
+定義語を高レベル記述で完全に定義することもできる。これは、`<BUILD`と`DOES>`を用いることにより行う。この定義の書式は、
 
 ```
     : [name] <BUILD [words to be executed at compile time]
@@ -1559,73 +1562,73 @@ Words concerned with the interpreter:
     HEX MSG SPACE 1 C, 20 C, DECIMAL
 ```
 
-MSGは定義語で、ASCII文字列を印字するワードを定義するために用いる。SPACEはMSGにより定義されたワードで、空白文字1文字を出力する。`1 C,`, `2 C,`は文字カウント1, ASCII空白文字(20)1文字 を辞書内部に構築する。図12は辞書エントリDOES>, MSG, SPACEの定義を表す。
+`MSG`は定義語で、ASCII文字列を印字するワードを定義するために用いる。`SPACE`は`MSG`を使用して定義されたワードで、空白文字1文字を出力する。`1 C,`, `20 C,`は文字カウント1, ASCII空白文字(20)1文字 を辞書内部に構築する。図12は辞書エントリ`DOES>`, `MSG`, `SPACE`の定義を表す。
 
 <figure>
 <img width=600, src="img/01-build-does-implementation.png">
 </figure>
 
-定義語`;CODE`と同様に、実行部分2つがある。MSGがSPACEを定義するときのものと、SPACE自身が実行されるときのものである。これら2つの高レベル定義は、MSGの定義の中に存在する。`DOES>`はMSGの実行を区切る。残りの句(COUNT TYPE ;)はMSGにより定義されたワード(例: SPACE)が実行されるときに呼び出される。
+定義語`;CODE`と同様に、実行部分2つがある。`MSG`が`SPACE`を定義するときのものと、`SPACE`自身が実行されるときのものである。これら2つの高レベル定義は、`MSG`の定義の中に存在する。`DOES>`は`MSG`の実行を区切る。残りの句(`COUNT TYPE ;`)は`MSG`により定義されたワード(例: `SPACE`)が実行されるときに呼び出される。
+
+> `;CODE`の説明は、この前の章、"13.1 Use of ;CODE" で説明される。
 
 `BUILD>`の定義は
 ```
     : <BUILD 0 CONSTANT ;
 ```
-だけである。これは辞書エントリを生成し、パラメータフィールドに2バイトを予約する。あとで、`DOES>`がそこの2バイトにアドレスを格納する。SPACEの出力文字列(`1 C, 2 C,`で明示的にコンパイルされている)はそのアドレスの後ろ、つまり、パラメータフィールドの3バイト目から始まる。
+だけである。これは辞書エントリを生成し、パラメータフィールドに2バイトを予約する。あとで、`DOES>`がそこの2バイトにアドレスを格納する。`SPACE`の出力文字列(`1 C, 2 C,`で明示的にコンパイルされている)はそのアドレスの後ろ、つまり、パラメータフィールドの3バイト目から始まる。
 
-`DOES>`はMSGの実行を終了させる。それ以後の句(COUNT TYPE ;)はSPACEにより実行される。しかしながら、この句が実行される前に、パラメータフィールドの3バイト目のアドレスがスタックに置かれる。これはもちろん出力文字列の開始アドレスである。このアドレスはCOUNTの引数として使われる。COUNTはTYPEのパラメータを準備する。
+`DOES>`は`MSG`の実行を終了させる。それ以後の句(`COUNT TYPE ;`)は`SPACE`により実行される。しかしながら、この句が実行される前に、パラメータフィールドの3バイト目のアドレスがスタックに置かれる。これはもちろん出力文字列の開始アドレスである。このアドレスは`COUNT`の引数として使われる。`COUNT`は`TYPE`のパラメータを準備する。
 
 `DOES>`の定義は、
 ```
-: DOES>   R> CURRENT @ @ n + ! ;CODE
+    : DOES>   R> CURRENT @ @ n + ! ;CODE
 ```
-の後ろに簡単に説明するコードが置かれる。上記の定義において、nはプロセッサ依存のリテラルで、`CURRENT @ @ n +`が、最近に生成されたエントリのパラメータフィールドへのアドレスを指すような値である。この場合、`<BUILD`により0がSPACEにコンパイルされる。(CURRENTは14章, VOCABLARIESで説明される)。この句の効果は、
+の後ろにコードが置かれる。上記の定義において、`n`はプロセッサ依存のリテラルで、`CURRENT @ @ n +`が、最近に生成されたエントリのパラメータフィールドへのアドレスを指すような値である。この場合、`<BUILD`により`0`が`SPACE`にコンパイルされる。(CURRENTは14章, VOCABLARIESで説明される)。この句の効果は、
 
 ```
     R> CURRENT @ @ n + !
 ```
-は、`COUNT TYPE ;`句のアドレスを、SPACEのパラメータフィールドの2バイトに保存する。これはリターンスタックのトップを取り除く。MSGの実行の際の効果として。
+は、`COUNT TYPE ;`句のアドレスを、`SPACE`のパラメータフィールドの2バイトに保存する。これはリターンスタックのトップを取り除く。`MSG`の実行の際の効果として。
 
-あとで、SPACEが呼び出されるとき、`DOES>`の;CODE句が実行される。このコード句は3つのことを行う。
+あとで、`SPACE`が呼び出されるとき、`DOES>`の;CODE句が実行される。このコード句は3つのことを行う。
 
 1. インタプリタポインタをリターンスタックに保存する。
-2. インタプリタ・ポインタをSPACEのパラメータ・フィールドの最初の2バイトのアドレス、すなわちCOUNT TYPE;というフレーズのアドレスでリセットする。
-3. SPACEのパラメータ・フィールドの3バイト目のアドレスをスタックにプッシュする。これがCOUNTの引数になる。
+2. インタプリタポインタを`SPACE`のパラメータ・フィールドの最初の2バイトのアドレス、すなわち`COUNT TYPE;`というフレーズのアドレスでリセットする。
+3. `SPACE`のパラメータ・フィールドの3バイト目のアドレスをスタックにプッシュする。これが`COUNT`の引数になる。
 
-Another useful MSG is CR, defined in HEX by 
-
-MSGが有効なもう一つの例は`CR`である。HEXの状態で、以下のように定義される。
+`MSG`が有効なもう一つの例は`CR`である。`HEX`の状態で、以下のように定義される。
 ```
-    MSG CR 6 C, DC, AC, 0 , 0 
+    MSG CR 6 C, D C, A C, 0 , 0 ,
 ```
 
-文字数は6で、DとAはそれぞれキャリッジリターンとラインフィードを表すASClIコードで、CRがタイプされるたびに送られる残りのヌル文字は、一部の端末やプリンターでタイミングをとるために必要である。
+文字数は6で、`D`と`A`はそれぞれキャリッジリターンとラインフィードを表すASClIコードで、`CR`がタイプされるたびに送られる残りのヌル文字は、一部の端末やプリンターでタイミングをとるために必要なものである。
 
-MSGの拡張で、文字列を読み取り、それをタイプアウトするために使用できる名前を与えるものはSTRINGであり、（10進数で）次のように定義される。
+`MSZ`の拡張で、文字列を読み取り、それをタイプアウトするために使用できる名前を与えるものは`STRING`であり、(10進数で)次のように定義される。
 ```
-    : STRING MSG 92 WOHD HERE C@ 1+ H +! ;
+    : STRING MSG 92 WORD HERE C@ 1+ H +! ;
 ```
-MSGは上記のように最初の定義を設定する。92は、WORDが区切り文字としてスタックから取り出す"˶"のASCIIコード。WORDは、名前に続く端末で入力された文字を、"\\"が出現するまでHEREの辞書に入れるが、Hは進めない。HERE C@ 1+は、カウントバイトを含む文字列の長さを与える。H+！はHをこの値だけインクリメントし、文字列を辞書に含める。STRINGの使い方として、単語ERRORの定義を考えてみよう：
+`MSG`は上記のように最初の定義を設定する。92は、`WORD`が区切り文字としてスタックから取り出す"\\"のASCIIコード。`WORD`は、名前に続く端末で入力された文字を、"\\"が出現するまで、辞書中の`HERE`の位置に入れるが、`H`は進めない。`HERE C@ 1+`は、カウントバイトを含む文字列の長さを与える。`H +!`は`H`をこの値だけインクリメントし、文字列を辞書に含める。`STRING`の使い方として、単語`ERROR`の定義を考えてみよう：
 ```
     STRING ERROR BAD!!\ 
 ```
-その後、ERRORという言葉を使うと、BAD!!!とタイプアウトしてしまう。
+その後、`ERROR`という言葉を使うと、`BAD!!`とタイプアウトしてしまう。
 
 > 注意：このような定義は、特に長い文字列の場合、メモリを浪費する。ディスク・システムでは、テキストをディスク上に保持する`MESSAGE`を使用するのが好ましい。しかし、これはディスクを持たないアプリケーションでメッセージを扱うには良い方法です。
 
 `<BUILDS>`と`DOES>`のもう一つの使用例は定義語の`FIELD`で、これはディスク上のデータブロックのフィールドを定義するために使用されます：
 ```
-    : FIELD  <BUILD C, DOES> C@ B# @ BLOCK + ;
+    : FIELD  <BUILDS C, DOES> C@ B# @ BLOCK + ;
 ```
-上記の定義において、`<BUILDS` と `DOES>` の間に `C,` という単語があることに注意してください。`<BUILDS>`と`DOES>`は本質的にこの目的のための別の単語であり、ユーザーが定義が`DOES>`によって完結される前に、作成される定義に続く任意のサイズフィールドの暗黙のコンパイルを指定できるようにするためのものである。 この場合、Cは後に`C@`によってフェッチされるBLOCKオフセットでコンパイルされる。 `<BUILDS`と`DOES>`の間に現れる単語は新しい単語が定義されたときに実行され、`DOES>`に続く単語は新しい単語が使われたときに実行されることを覚えておいてください。
+上記の定義において、`<BUILDS` と `DOES>` の間に `C,` という単語があることに注意してください。`<BUILDS>`と`DOES>`は本質的にこの目的のための別の単語であり、ユーザーが定義が`DOES>`によって完結される前に、作成される定義に続く任意のサイズフィールドの暗黙のコンパイルを指定できるようにするためのものである。 この場合、`C,`は後に`C@`によってフェッチされるBLOCKオフセットでコンパイルされる。 `<BUILDS`と`DOES>`の間に現れる単語は新しい単語が定義されたときに実行され、`DOES>`に続く単語は新しい単語が使われたときに実行されることを覚えておいてください。
 
 このように定義すると、`FIELDS`をこう定義することができる：
 ```
-    0 flELD NO. 1 £<'1ELD KIND 2 FIELD VALUE II FIELD OFFSET
+    0 FlELD NO. 1 FIELD KIND 2 FIELD VALUE 4 FIELD OFFSET
 ``` 
-etc. In use it is assumed that `B#` is a VARIABLE containing the number of some data block. Then VALUE would fetch the address of the third byte of the block ( in this case VALUE is assumed to be double length) and OFFSET would fetch the address of the 5th byte. This basic concept can be expanded to some elaborate data file management capabilities.
+などなど。使用時には、`B#`があるデータブロックの番号を含む`VARIABLE`であると仮定する。そして、`VALUE`はブロックの3バイト目のアドレスを取得し（この場合、`VALUE`は2倍の長さであると仮定される）、`OFFSET`は5バイト目のアドレスを取得する。この基本コンセプトは、手の込んだデータ・ファイル管理機能にまで拡張することができる。
 
-Consider an alternate definition of VECTOH ( with X, Y, and Z defined as above): 
+VECTORの別の定義を考えてみよう（X、Y、Zは上記のように定義されている）：
 ```
     VECTOR <BUILDS DOES> + ;
 ```
@@ -1634,9 +1637,90 @@ and the definition of a VECTOR:
     VECTOR CORNER 100 C, 40 C, 
 ```
 
-(Typing X CORNER C@ puts 100 on the stack ~nd Y CORNRR C~ puts 40 on the stack.) 
+(`X CORNER C@`と入力するとスタックに100が置かれ、`Y CORNER C@`と入力するとスタックに40が置かれる)。
 
-A comparison or this definition of VECTOH with the fl.rst one exhibit:-, tlle major differences between DOES> an:-1 ;COOE, namely that the use of high-level FORTH following DOES> is often more convenient than supplyi.ng code to follo1,i ;CODE.  This method is also more machine independent. 
+`VECTOR`のこの定義と最初の定義を比較すると、`DOES>`と`;COOE`の大きな違いがわかります。つまり、`DOES>`に続く高水準FORTHの使用は、`;CODE`に続くコードを供給するよりも便利なことが多いのです。 この方法はまた、よりマシンに依存しない。
 
-Hopefully, it has bt~en shown that different kinds of words may be usefully defined. Basic FORTH provides only CONSTANT and VARIABLE, but standard dcfinitlons of most of the words discussed here are available. If you encounter more than one instance of a p3rticular kind of word, or use such a word rrequently, it can pay orr in convenience, efficiency, and elegance, to name and characterize those properties that make it unique.
+願わくば、異なる種類の単語が有用に定義される可能性があることを示したい。基本的なFORTHは`CONSTANT`と`VARIABLE`しか提供しませんが、ここで取り上げた単語のほとんどは標準的な定義が可能です。特定の種類の単語が複数存在する場合、あるいはそのような単語を頻繁に使用する場合、その単語をユニークなものにするような性質に名前を付けて特徴付けることは、利便性、効率性、エレガントさにおいて有益です。
 
+## 付録: `;CODE`の説明
+
+> microForth TECHNICAL MANUAL, August 1978(Version 3 for RCA COSMAC)の13.1章の記載に基づく
+
+`;CODE`は、クラスの単語のコードアドレスにカスタムコードを指定することで、新しいクラスの単語を作成することができます。このプロセスを理解して、そこから理解を一般化できるように、`VARIABLE`の定義を詳細に見てみましょう。このプロセスにおいて、注意すべき時が3つあることを心にとどめておく必要があります。`VARIABLE`という単語が定義された時、`VARIABLE`が新しい単語を定義するために実行された時、そして`VARIABLE`によって定義された単語が呼び出され、パラメータ・フィールドのアドレスをスタックにプッシュされる時です。
+
+8080マイクロプロセッサの`VARIABLE`の定義は次のとおりである：
+```
+    : VARIABLE CONSTANT ;CODE
+        W INX   W PUSH    NEXT JMP
+```
+
+この定義がコンパイルされると、図11に示すようなエントリーが生成される。 この定義から
+```
+    0 VARIABLEM
+``` 
+は、`VARIABLE`を実行し、`M`の辞書定義を構築します。`M`のコードアドレスは、`VARIABLE`の定義中の`;CODE`の後の最初の命令を指す。
+
+`M`をコンパイルするための`VARIABLE`の実行は、以下のステップを実行する：
+
+`CONSTANT`：  
+入力メッセージ・バッファから単語Mを読み取り、その辞書エントリを構築する。コード・アドレスは`CONSTANT`のコードを指し、パラメータ・フィールドはスタック上の値（この場合は`0`）に初期化される。
+
+`;CODE`：  
+は、`M`のコード・アドレスを`VARIABLE`の定義の`;CODE`に続く単語のアドレス、つまり`INX`命令のアドレスに置き換えて、`M`のエントリを完成させる。
+
+上記の定義におけるキーワードは `;CODE` で、これはアセンブラコードのすぐ前にあります。
+<figure>
+<img width=600, src="img/02-semicode-implementation.png">
+<figcaption>Compilation of VARIABLE and the definition: `0 VARIABLE M`
+</figcaption>
+</figure>
+
+`VARIABLE` が実行されると、定義されているワードのコード・アドレスを `;CODE` に続くコード・アドレスにリセットする。
+
+`M`が定義された時には、`;CODE`に続くコード・フレーズが実行されるわけではないことに注意すること。 そうではなく、`M`が実行されるとき、内部インタプリタは`M`のコード・アドレス経由で`INX`命令にジャンプする。 この時、システム・パラメータ`W`には、実行されるワード（つまり`M`）のパラメータ・フィールドのアドレスより`1`小さいものが格納される。 (パラメータ・フィールドから`W`までの正確なオフセットはプロセッサに依存します。）  `W INX`命令はこのアドレスをインクリメントして、`M`の値（パラメータ・フィールド）を含む場所を指すようにし、`W PUSH`はこのアドレスをスタックに置き、`NEXT JMP`は内部インタプリタに制御を戻す。
+
+`VARIABLE`が行うことの定義は、どのFORTHプロセッサでも同じです。他の種類の単語を定義するために、このテクニックの重要な特徴を覚えておく必要があります：
+
+* **辞書項目を生成するために、以前に定義された定義語を使用する**： 
+  最も頻繁に使用されるのは、パラメータ・フィールドを初期化する`CONSTANT`である。パラメータを取らない`CREATE`や、同様の特性を持つ他の単語を使用することもできる。
+
+* **定義の最後に`;CODE`を使用し、その直後に新しいクラスの単語を定義するために使用したいコードを置きます。**
+
+* **あなたのコードが実行されるとき、`W`はクラスのメンバーのパラメータ・フィールドのアドレスを指す**: プロセッサによっては、`W`はパラメータ・フィールドのアドレスから0、1、2 を引いた値を指す。お使いのCPUの付録を参照してください。
+
+以下は、あるアプリケーションで有用な単語の例である。
+
+#### 13.1.1 VECTOR
+
+`VECTOR`は、X-Y座標、航法システムにおける緯度/経度/方位、方位角/高度など、2次元または3次元の変数を多用するアプリケーションで有用です。`VECTOR`への参照は、インデックスによって選択された値のいずれかをスタックに置く。つまり
+
+```
+   0 CONSTANT X 1 CONSTANT Y 2 CONSTANT Z
+       3 VECTOR SCALE
+```
+長さ3の`SCALE`という名前の`VECTOR`を得ます。値を選択する場合は、以下のように書きます。
+```
+    X SCALE C@ or Y SCALE C@   etc.
+```
+`VECTOR`のコードはスタック上のインデックスを期待し、`VECTOR`を使用して定義されたワードのパラメータ・フィールドの先頭アドレスを自動的に加算します。`VECTOR`のコードが8080上でどのようになるかを以下に示す：
+```
+    : VECTOR   CREATE H +! ;CODE
+         W INX  H POP   W DAD  HPUSH JMP
+```
+
+#### 13.1.2 ARRAY
+
+`ARRAY`はメモリ上の配列を定義する。参照されるとき、配列のインデックスはスタック上になければならない。スタック上のインデックスには`VECTOR`と同様に自動的に適用される。以下はその使用例である：
+```
+    100 ARRAY DATA
+        : RECORD 100 0 DO A/D I DATA C! LOOP ;
+```
+これはA/Dコンバーターからl00個の数値を読み取り、配列`DATA`に格納する。
+
+定義のコード部分は`VECTOR`と同じかもしれない。`VECTOR`はバイト・インデックスしか扱わないので、16ビット・データを含む配列は、それをベースアドレスに加える前にインデックスを2倍にするかもしれない。定義の最初の部分は、配列をすべて0に初期化する：
+```
+    : ARRAY CREATE HERE OVER ERASE H +! ;CODE
+        W INX ... etc.
+```
+ここで、`CREATE`は基本エントリを作成するために使用され、`HERE OVER ERASE`というフレーズは、配列に存在するエントリ数と同じ数だけゼロバイトをクリアする。 `H +!` は、`H`をインクリメントすることで、その後ろに次の定義を置くために必要な変位を確保して、このエントリを終了させます。
