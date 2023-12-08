@@ -353,6 +353,7 @@ do_beq:
     .global do_bra
 do_bra:
     add.w   (%a6),%a6
+    add.w   #2,%a6
     bra.w   do_next
 
 /* stack dump */

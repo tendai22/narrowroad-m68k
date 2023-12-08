@@ -264,6 +264,8 @@ word then level2
     // (A A here)
     swap
     sub
+    lit 2
+    sub
     // (A offset(here - (A + 2)))
     swap
     // (offset A)

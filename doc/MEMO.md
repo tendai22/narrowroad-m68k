@@ -1520,6 +1520,43 @@ word else immediate
     endword
 ```
 
+#### ブランチ命令オペランド計算の修正(12/8)
+
+`beq`命令のオペランド計算の起点を、「次の命令」となるように修正した。
+
+* 計算時にオペランドをさらに-2する。
+* bra命令実行時に+2する、
+
+これで`dump`コマンドも正しく動作した。
+
+差分は以下の通り。
+```
+diff --git a/base.dict b/base.dict
+index 10409b3..a4b011b 100644
+--- a/base.dict
++++ b/base.dict
+@@ -264,6 +264,8 @@ word then level2
+     // (A A here)
+     swap
+     sub
++    lit 2
++    sub
+     // (A offset(here - (A + 2)))
+     swap
+     // (offset A)
+diff --git a/codes.s b/codes.s
+index 6050026..43579b2 100644
+--- a/codes.s
++++ b/codes.s
+@@ -353,6 +353,7 @@ do_beq:
+     .global do_bra
+ do_bra:
+     add.w   (%a6),%a6
++    add.w   #2,%a6
+     bra.w   do_next
+
+ /* stack dump */
+```
 
 ### 付録. Moore_74に挙げられた基本ワード
 
