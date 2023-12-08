@@ -67,6 +67,22 @@ find_2:
     endcode
 
 //
+// accept ... (addr n+ -- addr n)
+//   read a line from stream input, return when
+//   cr/lf hit.
+code accept
+    move.w  (%a5)+,%d1      // input buffer size
+    eor.l   %d0,%d0
+    move.l  %d0,%a0
+    move.w  (%a5)+,%a0      // input buffer addr
+    move.l  %a0,-(%a7)      // save addr
+    jsr     (accept)
+    move.l  (%a7)+,%a0
+    move.w  %a0,-(%a5)
+    move.w  %d0,-(%a5)
+    endcode
+
+//
 // execute .. (xt -- )
 //
 code execute execute_word

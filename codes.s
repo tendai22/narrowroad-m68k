@@ -432,6 +432,7 @@ getchar:
     move.w  (__bufn),%d0
     and.w   %d0,%d0
     bne     getchar_1
+bp001:
     /* no chars, read chars from input stream to linbyf */
     move.w  %d1,-(%a7)
     move.l  #streambuf,%a0
@@ -694,6 +695,7 @@ false_str:
  *      %d1:  bufsiz
  * Out: %d0:  number of input chars
  */
+    .global accept
 accept:
     move.l  %a1,-(%a7)      /* push %a1 */
     move.l  %d2,-(%a7)      /* push %d2 */
