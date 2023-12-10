@@ -1,1 +1,1 @@
-: aho if 1 then ;
+: aho 1 + ;

@@ -299,6 +299,7 @@ word ; semicolon immediate
     end_compile
     lit #do_exit
     comma
+    break
     // tos is current entry top
     last
     exclamation     // change last

@@ -141,6 +141,7 @@ outer1_1:
      */
     jsr     (crlf)
     move.w  (%a5)+,%a0
+bp001:
 /*
  * do_number
  */
@@ -156,6 +157,7 @@ outer1_1:
      * out: %a0 .. addr (top) of found entry, or zero if not found
      *      %a1 .. addr of CFR of found entry 
      */
+bp002:
     move.l  %a0,%d0
     and.w   %d0,%d0
     beq     outer5
@@ -436,7 +438,6 @@ getchar:
     move.w  %a0,(__bufp)    /* __bufp initialize */
     move.b  #128,%d1        /* accept expect 1-byte counter, not word-size */
     jsr     (accept)        /* buffered input stream to linbuf */
-bp001:
     move.w  %d0,(__bufn)
     move.w  (%a7)+,%d1
 getchar_1:
@@ -453,6 +454,7 @@ getchar_1:
 
     move.w  (%a7)+,%d1
     move.w  (%a7)+,%a0
+bp005:
     rts
 
 /*
