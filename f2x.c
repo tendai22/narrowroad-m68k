@@ -6,12 +6,15 @@
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 int main(int ac, char **av)
 {
     FILE *fp, *op;
     uint16_t addr, start = 0x4000, d;
-    int count, c;
+    int count, c, n;
+    unsigned char *bp, *bptop, *htop;
+    unsigned short buflen, bufsize;
 
     if (ac == 1) {
         fprintf(stderr, "usage: %s [-o outfile] files...\n", av[0]);
@@ -30,46 +33,70 @@ int main(int ac, char **av)
         op = stdout;
     }
     // do files
-    start = 0x4000;
-    addr = start + 2;
-    count = 0;
-    for (int i = 1; i < ac; ++i) {
+    int rest = bufsize = 60000;
+    if((bptop = bp = malloc(bufsize)) == NULL) {
+        fprintf(stderr, "cannot alloc buffer\n");
+        fclose(op);
+    }
+    bp += 2;
+    for (int i = 1; rest > 1 && i < ac; ++i) {
         if ((fp = fopen(av[i], "r")) == 0) {
             fprintf(stderr, "cannot open infile: %s\n", av[i]);
             fclose(op);
             exit(1);
         }
-        while (1) {
-            if ((c = fgetc(fp)) != EOF) {
-                d = c;
-                d <<= 8;
-                d &= 0xff00;
-            } else {
-                if (count % 16 != 0) {
-                    fprintf(op, "\n");
-                }
-                break;
-            }
-
-            if ((c = fgetc(fp)) != EOF) {
-                d |= c;
-            }
-            if (count == 0) {
-                fprintf(op, "=%04x\n", addr);
-            }
-            fprintf(op, " %04x", d);
-            count += 2;
-            if (count % 16 == 0) {
-                fprintf(op, "\n");
-            }
-            if (c == EOF)
-                break;
+        n = fread(bp, sizeof(char), rest,  fp);
+        if (n == 0) {
+            // end of the file
+            fclose(fp);
+            continue;
         }
-        fclose(fp);
+        // okay, got it
+        bp += n;
+        rest -= n;
     }
-    if (count > 0) {
-        fprintf(op, "\n=%04x %04x\n", start, count);
+    n = bp - bptop;     // file size
+    if (n & 1) {
+        *bp++ = 0;  // dummy null byte, word alignment achieved
+        n++;
     }
+    bptop[0] = (n & 0xff00) / 256;
+    bptop[1] = n & 0xff;
+    // output a *.X file
+    start = 0x4000;
+    count = n;
+    bp = bptop;
+    htop = bp;
+    int i;
+    for (i = 0; i < count; i += 2) {
+        if (i % 16 == 0) {
+            fprintf(op, "=%04X", start + i);
+            htop = bp;
+        }
+        d = ((unsigned short)bp[0]) * 256 + bp[1];
+        fprintf(op, " %04X", d);
+        bp += 2;
+        if (i % 16 >= 14) {
+#if 0
+            fprintf(op, "  // ");
+            for (int j = 0; j < 16; ++j) {
+                c = (' ' <= htop[j] && htop[j] < 0x7f) ? htop[j] : '.'; 
+                fputc(c, op);
+            }
+#endif
+            fprintf(op, "\n");
+        }
+    }
+#if 0
+    if (i % 16 > 0) {
+        fprintf(op, "  // ");
+        for (int j = 0; j < 16; ++j) {
+            c = (' ' <= htop[j] && htop[j] < 0x7f) ? htop[j] : '.'; 
+            fputc(c, op);
+        }
+    }
+#endif
+    fprintf(op, "\n");
     fclose(op);
     return 0;
 }

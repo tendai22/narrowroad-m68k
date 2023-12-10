@@ -1,9 +1,5 @@
 .include "emu68kplus.h"
 
-/*    .equ    code_top, 0x1000
-    .equ    dict_top, 0x2000
-    .equ    ram_end, 0x10000
-*/
     .section VECTOR_TABLE
     dc.l    sp_end          /* 0: Initial SP */
     dc.l    start           /* 1: Initial PC */
@@ -15,7 +11,7 @@
 /*
  * code segment
  */
-    .section CODES
+    .section CODE
 code_top:
 ram_top:
 
@@ -39,8 +35,9 @@ __state:
 /*
  * linbuffer for getchar
  */
+    .global linbuf
 __bufp:
-    dc.w    0
+    dc.w    0x3400
 __bufn:
     dc.w    0
 
@@ -106,12 +103,14 @@ initial_point:
  */
 initial_filebuffer:
     move.l  #fsource_top,%a0
-    move.w  (%a0)+,%d0
+    eor.w   %d0,%d0
+    move.w  (%a0)+,%d0      /* counter is 2 byte length */
     and.w   %d0,%d0
     beq     outer
     /* fill getchar buffer */
     move.w  %a0,(__bufp)
     move.w  %d0,(__bufn)
+bp003:
 
 /*
  * outer interpreter 
@@ -287,7 +286,6 @@ do_exit:
     move.w  (%a4)+,%a6          /* pop IP from RSP */
     move.w  (%a6),%a0
     add.w   #2,%a6
-/*bp001:*/
     jmp     (%a0)
     .global do_next
 do_next:
@@ -432,13 +430,13 @@ getchar:
     move.w  (__bufn),%d0
     and.w   %d0,%d0
     bne     getchar_1
-bp001:
     /* no chars, read chars from input stream to linbyf */
     move.w  %d1,-(%a7)
     move.l  #streambuf,%a0
     move.w  %a0,(__bufp)    /* __bufp initialize */
-    move.w  #128,%d1
+    move.b  #128,%d1        /* accept expect 1-byte counter, not word-size */
     jsr     (accept)        /* buffered input stream to linbuf */
+bp001:
     move.w  %d0,(__bufn)
     move.w  (%a7)+,%d1
 getchar_1:
@@ -452,6 +450,7 @@ getchar_1:
     move.b  (%a0)+,%d0
     move.w  %a0,(__bufp)
     and.w   #0xff,%d0
+
     move.w  (%a7)+,%d1
     move.w  (%a7)+,%a0
     rts
