@@ -5,6 +5,7 @@ NAME=narrowroad
 OBJDUMP=m68k-elf-objdump
 LD=m68k-elf-ld
 AS=m68k-elf-as
+F2X=./f2x
 RM=rm -f
 
 OBJS=codes.o dict.o
@@ -15,9 +16,9 @@ TMPS=dict.s a.dict a.out a.symbols codes.list dict.list
 	$(AS) -a=$*.list -o $*.o $*.s
 
 .f.X:
-	./f2x -o $*.X $*.f
+	$(F2X) -o $*.X $*.f
 
-all: $(NAME).X bp.X $(NAME).dict $(NAME).list forth.X
+all: $(NAME).X bp.X $(NAME).dict $(NAME).list forth.X $(F2X)
 
 a.out:  $(OBJS)
 	$(LD) -T trip.ldscript $(OBJS)
@@ -30,6 +31,9 @@ $(NAME).dict: a.out dictdump
 
 $(NAME).X: a.out
 	sh dump.sh > $(NAME).X
+
+f2x: f2x.c
+	cc -o f2x f2x.c
 
 bp.X: a.out
 	sh extract_bp.sh > bp.X
