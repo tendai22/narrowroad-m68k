@@ -759,8 +759,8 @@ word ttest
     endword
 
 code word_break
-    move.w  (%a5),%a0
-qq001:
+qq001:          // word_break process does in Musashi
+                // so no need to do anything here
     endcode
 
 word test

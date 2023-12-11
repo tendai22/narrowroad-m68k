@@ -110,7 +110,6 @@ initial_filebuffer:
     /* fill getchar buffer */
     move.w  %a0,(__bufp)
     move.w  %d0,(__bufn)
-bp003:
 
 /*
  * outer interpreter 
@@ -141,7 +140,6 @@ outer1_1:
      */
     jsr     (crlf)
     move.w  (%a5)+,%a0
-bp001:
 /*
  * do_number
  */
@@ -157,7 +155,6 @@ bp001:
      * out: %a0 .. addr (top) of found entry, or zero if not found
      *      %a1 .. addr of CFR of found entry 
      */
-bp002:
     move.l  %a0,%d0
     and.w   %d0,%d0
     beq     outer5
@@ -307,9 +304,8 @@ do_next:
     jsr     (crlf)
     move.l  (%a7)+,%a0
 do_next1:
-    add.w   #2,%a6
-
 qr001:
+    add.w   #2,%a6
     jmp     (%a0)               /* exec next token */
 
 /* virtual machine instruction */
@@ -455,7 +451,6 @@ getchar_1:
 
     move.w  (%a7)+,%d1
     move.w  (%a7)+,%a0
-bp005:
     rts
 
 /*
