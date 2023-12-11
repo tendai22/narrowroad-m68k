@@ -309,6 +309,7 @@ do_next:
 do_next1:
     add.w   #2,%a6
 
+qr001:
     jmp     (%a0)               /* exec next token */
 
 /* virtual machine instruction */

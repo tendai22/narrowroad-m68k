@@ -758,7 +758,13 @@ word ttest
     types
     endword
 
+code word_break
+    move.w  (%a5),%a0
+qq001:
+    endcode
+
 word test
+    word_break
     lit 32
     word
     lit 10
