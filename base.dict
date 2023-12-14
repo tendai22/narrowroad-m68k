@@ -771,4 +771,8 @@ word test
     number
     endword
 
+word add_one
+    lit 1
+    add
+    endword
 
