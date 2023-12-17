@@ -126,11 +126,11 @@ BEGIN {
         next
     }
     # split
-    if (s ~ /^lit[  ]/ || s ~ /^bra[  ]/ || s ~ /^bne[  ]/) {
+    if (s ~ /^lit[  ]/ || s ~ /^bra[  ]/ || s ~ /^bne[  ]/ || s ~ /^beq[    ]/) {
         n= split(s, b, /[     ]*/)
         s = b[1]
         ope = b[2]
-        if (s ~ /^bra$/ || s ~ /^bne$/) {
+        if (s ~ /^bra$/ || s ~ /^bne$/ || s ~ /^beq$/) {
             ope = "L_" ope
         }
         body = body "|" s "|" ope;
