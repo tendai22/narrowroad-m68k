@@ -428,14 +428,9 @@ getchar:
     move.w  (__bufn),%d0
     and.w   %d0,%d0
     bne     getchar_1
-    /* no chars, read chars from input stream to linbyf */
-    move.w  %d1,-(%a7)
-    move.l  #streambuf,%a0
-    move.w  %a0,(__bufp)    /* __bufp initialize */
-    move.b  #128,%d1        /* accept expect 1-byte counter, not word-size */
-    jsr     (accept)        /* buffered input stream to linbuf */
-    move.w  %d0,(__bufn)
-    move.w  (%a7)+,%d1
+    /* no chars, read a chars from serial port */
+    jmp     (getch)
+    
 getchar_1:
     /* remains chars, return one of them */
     add.w   #-1,%d0
@@ -663,10 +658,6 @@ typeb_sub1:
     move.l  (%a7)+,%d0
     rts
 
-
-
-
-
 /* do_add */
     .global do_add
 do_add:
@@ -704,7 +695,7 @@ acceptl:
                              * d1 > d2  -> branch
                              * d1 < d2  -> skip
                              */
-    jsr     (getch)
+    jsr     (getchar)
     cmp.b   #'\r',%d0       /* \r ? */
     beq     acceptz
     cmp.b   #'\n',%d0
