@@ -776,3 +776,13 @@ word add_one
     add
     endword
 
+word test3
+    beq test3_1
+    lit 1
+    bra test3_2
+test3_1:
+    lit 0
+test3_2:
+    period
+    cr
+    endword
