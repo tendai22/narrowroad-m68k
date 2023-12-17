@@ -288,8 +288,8 @@ do_exit:
     jmp     (%a0)
     .global do_next
 do_next:
-    move.w  (%a6),%d0           /* 3 instructions equivalent to jmp  (%a6)+ */
-    move.w  %d0,%a0
+    move.l  0,%a0
+    move.w  (%a6)+,%a0
     bra     do_next1
     jsr     (dump_entry)
     /* trace word list execution */
@@ -305,7 +305,6 @@ do_next:
     move.l  (%a7)+,%a0
 do_next1:
 qr001:
-    add.w   #2,%a6
     jmp     (%a0)               /* exec next token */
 
 /* virtual machine instruction */
