@@ -135,18 +135,27 @@ outer1_1:
     /* main loop */
     jsr     (dump_stack)
 outer1_2:
+    /*
+     * get another line
+     */
     move.b  #93,%d0             /* ']' as a prompt */
     jsr     (putch)
     /* line input */
-    move.w  #__s0,-(%a5)
+    move.w  (__s0),-(%a5)
     move.w  #80,-(%a5)
     move.l  #do_accept,%a0
     jsr     (execute)
     move.w  (%a5)+,%d0
+    add.w   #2,%a5          /* drop addr */
     and.w   %d0,%d0
     beq     outer1_2        /* get another line */
+    jsr     (crlf)
     /* prep >in */
     move.w  #0,(__in_stream)
+outer1_3:
+    /*
+     * word loop
+     */
     /* execute `word` */
     move.w  #' ',-(%a5)
     move.l  #do_word,%a0
@@ -154,29 +163,29 @@ outer1_2:
     /*
      * Out: (%a5) ... string address
      */
-    jsr     (crlf)
-bp001:
     move.w  (%a5)+,%a0
     /* if zero, need another line */
     move.b  (%a0),%d0
     and.b   %d0,%d0
-    beq     outer1_2    
-/*
- * do_number
- */
+    beq     outer1_1    
     /* now gotten a word, find and execute */
     /* in: %a0 ... a word pointer
      *     %a1 ... 'LAST', top of the dictionary entry
      */
-    eor.l   %d1,%d1
-    move.w  (last_addr),%d1
-    move.l  %d1,%a1             /* set LAST to %a1 */
-    jsr     (do_find_asm)
+    eor.l   %d0,%d0
+    move.w  (here_addr),%d0
+    move.w  %d0,-(%a5)             /* push `here` */
+    move.l  #do_find,%a0
+    jsr     (execute)
+    /*
+     * (0 | xt 1(normal word) | xt -1(immediate word))
+     */
+
     /*
      * out: %a0 .. addr (top) of found entry, or zero if not found
      *      %a1 .. addr of CFR of found entry 
      */
-    move.l  %a0,%d0
+    move.w  (%a5)+,%d0
     and.w   %d0,%d0
     beq     outer5
 /* check execute/compile */
@@ -189,62 +198,83 @@ do_compile:
     move.w  (here_addr),%a0
     move.w  %a1,(%a0)+          /* put word entry, and increment pointer */
     move.w  %a0,(here_addr)
-    bra     outer1_1
+    bra     outer1_3
 do_exec:
     move.l  %a1,%a0
     /*jsr     (dump_entry)*/
     jsr     (execute)
-    bra     outer1_1
+    bra     outer1_3
 
 outer5:
     /* word not found, try to convert a number */
     /* In: %a0 ... input string, (wordbuf)
      *     %d1 ... (rest) number of characters(length of input string)
      */
-    eor.l   %d0,%d0
     move.w  (here_addr),%d0
-    move.l  %d0,%a0
-    eor.l   %d1,%d1
-    move.b  (%a0)+,%d1
-    /* In: %a0 ... numbered word string
-     *     %d1 ... number of characters
-     */
-    jsr     (do_number)
-    /* Out: %a0 .. next position in input string
-     *     %d1 ... rest number of characters (or zero)
-     *     %d2: converted do_number
-     *     %d0 ... validity flag, Zero: value of %d2 is valid, Non-Zero: not valid
-     */
+    move.w  %d0,-(%a5)
+    move.w  (__base),%d0
+    move.w  %d0,-(%a5)
+    move.l  #do_number,%a0
+    jsr     (execute)
+    /* Out: (0 | single 1 | double 2) */
+    move.w  (%a5)+,%d0
     and.w   %d0,%d0
-    bne     outer7
+    beq     notfound_error
+    /* 1 ... single length integer */
+    add.w   #-1,%d0
+    beq     outer9     /* ok, do execute */
+    /* 2 ... double length integer */
+    add.w   #4,%a5     /* cancel 2 words */
+    bra     toobig_error    /* too big error */
+
+    /*
+     * execution, push stack or literal it
+     */
+outer9:
     /* check status */
     move.w  (__state),%d0
     and.w   %d0,%d0
     bne     outer8
     /* get a number, push it */
-    move.w  %d2,-(%a5)          /* put a number to DSP */
-    bne     outer1
+    /* no need to push, already pushed */
+    bra     outer1_3
 outer8:
     /* compile a number, put lit and number */
     eor.l   %d0,%d0
     move.w  (here_addr),%d0
     move.l  %d0,%a0
     move.w  #do_lit,(%a0)+
-    move.w  %d2,(%a0)+
+    move.w  (%a5)+,%d0
+    move.w  %d0,(%a0)+
     move.w  %a0,(here_addr)     /* 4 allot */
-    jmp     outer1_1
+    jmp     outer1_3
 
     /* error message */
 notfound_str:
     dc.b    11
     .ascii  "not found\r\n"
-outer7:
-    /* not found error */
+toobig_str:
+    dc.b    13
+    .ascii  "too big num\r\n"
+
+notfound_error:
+    move.l  #notfound_str,%a0
+    bra     outer_error
+toobig_error:
+    move.l  #toobig_str,%a0
+
+    /*
+     * outer_error: in %a0 ... error message
+     */
+outer_error:
+    move.l  %a0,-(%a7)
     jsr     (crlf)
-    move.l  #wordbuf,%a0
+    eor.l   %d0,%d0
+    move.w  (here_addr),%d0
+    move.l  %d0,%a0
     jsr     (putstr)
     jsr     (space) 
-    move.l  #notfound_str,%a0
+    move.l  (%a7)+,%a0
     jsr     (putstr)
     /* dispose linbuf content, re-getline */
     bra     outer1
@@ -278,6 +308,7 @@ check_if1:
  * execute ... execute word cfa
  *   IN: %a0 ... cfa address
  */
+    .global execute
 execute:
     move.l  %a6,-(%a7)
     move.l  #exec_1,%a6     /* initialize IP (as return address) */
@@ -735,11 +766,12 @@ acceptdel:
     jsr     (putch)
     move.b  #8,%d0
     jsr     (putch)
-    bra.b   acceptl  
+    bra.b   acceptl
+ 
 acceptz:
     /* trailing space on the buffer */
-    move.b  #' ',(%a1,%d1)
-    add.w   #1,%d1
+    move.b  #0,(%a1,%d1)    /* put EOT */
+    /*add.w   #1,%d1*/
     /* return it */
     move.w  %d1,%d0
     move.l  (%a7)+,%d2
@@ -784,7 +816,7 @@ tonumbere:
     rts
 
 /*
- * do_number
+ * number (previous name do_number_asm)
  * In: %a0 ... input string,
  *     %d1 ... max number of characters(length of input string)
  * Out: %a0 .. next position in input string
@@ -792,7 +824,7 @@ tonumbere:
  *     %d2: converted do_number
  *     %d0 ... validity flag, Zero: value of %d2 is valid, Non-Zero: not valid
  */
-do_number:
+do_number_asm:
     move.w  %d3,-(%a7)      /* push %d3 */
     move.w  %d4,-(%a7)      /* push %d4 */
     /*
@@ -837,7 +869,7 @@ do_num3:
     beq     do_num_e
     move.b  (%a0)+,%d0
     sub.w   #1,%d1    
-    jsr     (tonumber)      /* assume %d3 has (__base)
+    jsr     (tonumber)      /* assume %d3 has (__base) */
     and.l   %d0,%d0
     bmi     do_num5
     /* accumulate it */
@@ -890,7 +922,7 @@ do_num_e4:
  *     %d0 ... result flag, return number of copied characters
  */
 
-    .global do_word
+    .global do_word_asm
 do_word_asm:
     move.l  %a2,-(%a7)      /* push %a2 */
     move.w  %d3,-(%a7)      /* push %d3 */
@@ -1006,7 +1038,7 @@ find0:
     add.w   %d0,%a1
     move.w  (%a1),%d0   /* %d0 now points to next entry top */
     and.w   #0xbfff,%d0 /* test %d0 (next ptr value) */
-    move.w  %d0,%a1     /* clear precedence flag bits */   
+    move.l  %d0,%a1     /* clear precedence flag bits */
     bne     find0
     /* find an entry */
 find1:
