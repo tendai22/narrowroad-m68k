@@ -31,6 +31,12 @@ __base:
     .global __state
 __state:
     dc.w    0
+    .global __s0
+__s0:
+    dc.w    sp_end
+    .global __in_stream
+__in_stream:
+    dc.w    0
 
 /*
  * linbuffer for getchar
@@ -128,9 +134,19 @@ outer_uerr:
 outer1_1:
     /* main loop */
     jsr     (dump_stack)
+outer1_2:
     move.b  #93,%d0             /* ']' as a prompt */
     jsr     (putch)
     /* line input */
+    move.w  #__s0,-(%a5)
+    move.w  #80,-(%a5)
+    move.l  #do_accept,%a0
+    jsr     (execute)
+    move.w  (%a5)+,%d0
+    and.w   %d0,%d0
+    beq     outer1_2        /* get another line */
+    /* prep >in */
+    move.w  #0,(__in_stream)
     /* execute `word` */
     move.w  #' ',-(%a5)
     move.l  #do_word,%a0
@@ -139,7 +155,12 @@ outer1_1:
      * Out: (%a5) ... string address
      */
     jsr     (crlf)
+bp001:
     move.w  (%a5)+,%a0
+    /* if zero, need another line */
+    move.b  (%a0),%d0
+    and.b   %d0,%d0
+    beq     outer1_2    
 /*
  * do_number
  */
@@ -429,8 +450,8 @@ getchar:
     and.w   %d0,%d0
     bne     getchar_1
     /* no chars, read a chars from serial port */
-    jmp     (getch)
-    
+    jsr     (getch)
+    rts
 getchar_1:
     /* remains chars, return one of them */
     add.w   #-1,%d0
@@ -446,14 +467,6 @@ getchar_1:
     move.w  (%a7)+,%d1
     move.w  (%a7)+,%a0
     rts
-
-/*
- * accept: line input (aka gets)
- * In:  %a0:  *buf
- *      %d1:  bufsiz
- * Out: %d0:  number of input chars
- */
-
 
 /*
  * putstr

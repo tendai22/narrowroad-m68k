@@ -28,6 +28,7 @@ tail_addr:
 
     /* extern word cfa's */
     .global do_word
+    .global do_accept
 EOF
 # dict definitions
 cat ${SRC} |awk '#

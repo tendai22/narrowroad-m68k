@@ -573,10 +573,7 @@ code emit
 //
 // compilers
 //
-code in> in_stream
-    jsr     (getchar)
-    move.w  %d0,-(%a5)
-    endcode
+
 //
 // word ... read a word from input stream and
 //          put it to the end-of-dictionary
@@ -593,21 +590,23 @@ code word
     and.b   %d2,%d2
 word_1:
     beq     word_2
-    jsr     (getchar)       // buffered/block input
+    jsr     (getchar)       // read a char from line buffer
+    move.w  (%a5)+,%d0
     move.b  %d0,(%a1)+
-    cmp.b   %d1,%d0
+    and.b   %d0,%d0         // check if EOT
+    beq     word_2
+    cmp.b   %d1,%d0         // check if delimiter
     beq     word_2
     add.w   #-1,%d2
     bra     word_1
 word_2:
-    cmp.b   -(%a1),%d1      // last char is delimiter?
-    beq     word_3
-    add.l   #1,%a1          // restore %a1
+    // delimiter or EOT
+    sub.l   #2,%a1          // restore %a1
 word_3:
     move.l  (%a7)+,%a0      // restore top-of-entry addr
     move.l  %a1,%d0
     sub.l   %a0,%d0         // end-addr - start-addr -> %d0
-    add.b   #-1,%D0         // dec 1 omiiting top one byte
+    add.b   #-1,%d0         // dec 1 omiiting top one byte
     move.b  %d0,(%a0)       // put n to top-of-the entry
     move.w  %a0,-(%a5)
     endcode
@@ -710,9 +709,7 @@ code 's tick_s
     move.w  %d0,-(%a5)       // dummy push
     move.w  %a5,(%a5)
     endcode
-code s0
-    move.w  #dsp_end,-(%a5)
-    endcode
+
 code put_list
     move.w  (here_addr),%d0
     and.l   #0xffff,%d0
@@ -733,6 +730,11 @@ word put_link
     allot
     endword
 
+
+
+/*
+ * test words again
+ */
 word test2
 test2_1:
     lit 0x61
@@ -740,9 +742,6 @@ test2_1:
     bra test2_1
     endword
 
-/*
- * test words again
- */
 word branch
     bne  bra_1
     lit  #false_str
@@ -786,3 +785,40 @@ test3_2:
     period
     cr
     endword
+
+//
+// input buffer
+//
+word _read_ch
+    in_stream
+    dup
+    atfetch
+    s0
+    atfetch
+    add
+    // (in_stream ptr -- )
+    // get ptr to current char
+    bytefetch
+    dup
+    bne _read_ch_1
+    // EOT
+    drop
+    exit
+_read_ch_1:
+    // (in_stream char)
+    swap
+    dup
+    atfetch
+    lit 1
+    add
+    exclamation     // >in ++
+    // (char)
+    endword
+
+code s0
+    move.w  #__s0,-(%a5)
+    endcode
+
+code >in in_stream
+    move.w  #__in_stream,-(%a5)
+    endcode
