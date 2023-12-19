@@ -52,9 +52,10 @@ exit|inner/native,<br>code|**(済)**:ワードリスト最後の機械語コー�
 getch|i/o/native|**(済)**:1バイト入力。キー入力が来るまで待つ。
 putch|i/o/native|**(済)**:1バイト出力、Musashiシミュレータの場合1文字1ms程度(おおよそ9600bps)で出力する。
 kbhit|i/o/native|キー入力の有無を見る。未実装。
-getchar|stream/native|**(済)**:行入力(_accept)を下位に持つ1文字入力ルーチン。wordが使用する。プロンプトの出力もここで行う。
+getchar|stream/native|**(済)**:行入力(_accept)を下位に持つ1文字入力ルーチン。acceptが使用する。プロンプトの出力は外部インタプリタで行う。
+_rest_stream|ストリームの残文字数を返す(wordデータ)。外部インタプリタがプロンプト出すかどうかの判定で用いる。
 interpret|outer/word|外部インタプリタ。WORD, FIND, NUMBERのあと実行またはコンパイルの無限ループ
-word|outer/word|**(済)**:入力ストリームから文字列を切り出し辞書末尾(here)に置く。ワード定義の際はその位置でそのまま使える。
+word|outer/word|**(済)**:S0/\>INから文字列を切り出し辞書末尾(here)に置く。ワード定義の際はその位置でそのまま使える。
 find|outer/code|**(済)**:(c-addr -- 0\|xt 1\|xt -1): 切り出したワードを辞書検索する。現在は単一辞書を想定している。見つからなければ0を返す。<br>見つかれば1,-1(immediateワードの場合)の下にexecution tokenを返す。
 execute|outer/code|**(済)**:ワードのCFAにジャンプする。コンパイルはinterpret内部で分岐処理する。Moore74によればstateの値により実行またはコンパイルをするらしい。
 number|outer/code|**(済)**:(addr -- n1 .. nn, n2): n2==0, fail, 1: single-precision, 2: double-precision。切り出したワードを数字に変換しスタックに載せる。
@@ -131,13 +132,13 @@ octal|print/word|
 hex|print/word|**(済)**:baseを16にする。
 key|input/code|キーボードからの1文字入力、いまはストリーム入力からの1文字と同一とする。
 key?|input/code|kbhit
-accept|input/code|(addr +n -- len): ストリーム入力をバッファに読み込み、読み込み長を返す。アセンブラ版を辞書に移動させる。実際はgetchar/keyで入力する。
+accept|input/code|(addr +n -- len): ストリーム入力をバッファに読み込み、読み込み長を返す。アセンブラ版を辞書に移動させる。実際は`getchar`で入力する。
 expect|input/code|(addr +n -- ): acceptと同じ、ただし末尾に2バイトのnullを置く。本システムではacceptを使い、expectは使わない。
 s"|input/code|( -- caddr len): ダブルクォートのみの単語までの文字列を入力し、どこかのバッファに置く。とりあえず辞書末尾かな。
 s"|input/code|( -- caddr): 長さ付文字列をバッファに置く。とりあえず辞書末尾(DP)。
 s0|input/var|( -- addr): 行入力バッファアドレスの変数(のアドレスをスタックに置く)。`s0 @`で行入力バッファアドレスを得る。外部インタプリタの`accept`の入力バッファ
 \>in|input/var|( -- n): 行入力バッファ中のカレントインデックス。ポインタでなくインデックス。`s0 @ >in @ +`で現在の文字を指すアドレスを得る。
-_readch|input/word|( -- ch): 行入力バッファから1文字読み込みスタックに置く。カレントポインタを1増やす。行末でEOT(`\0`)を置く。一度`\0`を読み込むとりせっつするまではEOTを返す。リセットは`0 >in !`。
+_read_ch|input/word|( -- ch): 行入力バッファから1文字読み込みスタックに置く。カレントポインタを1増やす。行末でEOT(`\0`)を置く。一度`\0`を読み込むとりせっつするまではEOTを返す。リセットは`0 \>in !`。
 count|string/word|(caddr -- caddr+1 length): 長さ付文字列を入力とし、文字列本体と長さをスタックに積む。
 minus|arith/code|(n -- -n)
 abs|arith/code|(n -- \|n\|)
