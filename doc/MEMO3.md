@@ -71,3 +71,75 @@
   * do_same(ワード化する)
   * do_find_asm(消す、もう使っていない)
   * dump_entry
+
+### DOループ実装の注意(12/19)
+
+* Starting Forthから
+* 増やした時は`>=`だが、減らすときは`<`である(イコールは入らない)
+* `LEAVE`は、インデックスを上限値にセットする(減らすとき大丈夫なのか？)
+* `DO`ループは少なくとも1回は実行される。
+* `I`はリターンスタックの1番目をパラメータスタックに戻す
+* `I'`はリターンスタックの2番目をパラメータスタックに戻す
+* `J`はリターンスタックの3番目をパラメータスタックに戻す
+* `DO`はインデックスと上限値をパラメータスタックからリターンスタックに移動させる。
+* 
+
+### Starting Forthの注3
+
+Many professional FORTH programmers who have been writing complex applications for years have never had to use floating-point. And their applications often involve solutions of differential equations, Fast Fourier Transforms, non-linear least squares fitting, linear regression, etc. Problems that traditionally required a main-frame have been done on slower minicomputers and microprocessors, in some cases with an overall increase in computation rate.
+
+何年も複雑なアプリケーションを書き続けているプロの FORTH プログラマの多くは、浮動小数点を使ったことがありません。そして彼らのアプリケーションは、微分方程式の解法、高速フーリエ変換、非線形最小二乗法、線形回帰などを含むことが多い。従来はメインフレームが必要だった問題が、より低速のミニコンピュータやマイクロプロセッサで処理されるようになり、場合によっては全体的な計算速度が向上することもある。
+
+Most problems with physical inputs and outputs, including weather modeling, image reconstruction, automated electrical measurements, and the like all involve input and output variables that inherently have a dynamic range of no more than a few thousand to one, and thus fit comfortably into a 16-bit integer word. Intermediate calculation steps (such as summation) can be handled by the judicious use of scaling and double-length integers where required. For example, one common calculation step might involve multiplying each data point by a parameter (or by itself) and summing the result. In fixed point, this would be a 16 x 16-bit multiply and 32-bit summation. In floating-point, numbers are likely stored as 24-bit mantissa and 8-bit exponents. The 24-bit multiply will take about 1.5 times longer and the 32-bit addition 3-10 times longer than in fixed point. There is also the overhead of floating all the input data and fixing all the output data, approximately equal to one floating point addition each. When these operat ~ons are performed thousands or millions of times, the overall saving by remaining in integer form is enormous.
+
+気象モデリング、画像再構成、自動電気測定など、物理的な入出力を伴うほとんどの問題は、本質的に数千分の1以下のダイナミックレンジしか持たない入出力変数を含むため、16ビット整数ワードに快適に収まる。中間的な計算ステップ(総和など)は、必要に応じて倍長整数とスケーリングを使用することで処理できます。例えば、一般的な計算ステップでは、各データポイントにパラメータ（またはそれ自身）を乗算し、その結果を合計することがあります。固定小数点では、これは 16 x 16 ビットの乗算と 32 ビットの和算になります。浮動小数点では、数値は 24 ビットの仮数と 8 ビットの指数として格納されます。24ビットの乗算には約1.5倍、32ビットの加算には固定小数点の3～10倍の時間がかかります。また、すべての入力データを浮動小数点化し、すべての出力データを固定小数点化するオーバーヘッドが発生します。これらの演算が何千回、何百万回と実行される場合、整数のままであることによる全体的な節約は、固定小数点演算の3倍から10倍になる、整数形式のままであることによる全体的な節約は莫大である。
+
+### Starting Forth "Why FORTH Programmers Advocate Fixed-Point"
+
+Many respectable languages and many distinguished programmers use floating-point arithmetic as a matter of course. Their opinion might be expressed like this: "Why should I have to worry about moving decimal points around? That's what computers are for."
+
+多くの立派な言語と多くの著名なプログラマーは、当然のように浮動小数点演算を使っている。彼らの意見はこうだ： 「小数点の移動について心配する必要があるのか？そのためにコンピューターがあるんだ」。
+
+That's a valid question--in fact it expresses the most significant advantage to floating-point implementation. For translating a mathematical equation into program code, having a floating-point language makes the programmer's life easier.
+
+実際、これは浮動小数点実装の最も重要な利点を表している。数式をプログラムコードに変換する場合、浮動小数点言語があればプログラマは楽になります。
+
+The typical FORTH programmer, however, perceives the role of a computer differently. A FORTH programmer is most interested in maximizing the efficiency of the machine.   That means he or she wants to make the program run as fast as possible and require as little computer memory as possible.
+
+しかし、典型的なFORTHプログラマは、コンピュータの役割を異なったものとして捉えています。FORTHプログラマーは、マシンの効率を最大化することに最も関心があります。  つまり、プログラムをできるだけ速く走らせ、コンピュータのメモリをできるだけ少なくしたいのです。
+
+To a FORTH programmer, if a problem is worth doing on a computer at all, it is worth doing on a computer well. The philosophy is, "If you just want a quick answer to a few calculations, you might as well use a hand-held calculator." You won't care i f the calculator takes half a second to display the result. But if you have invested in a computer, you probably have to repeat the same set of calculations over and over and over again. Fixed-point arithmetic will give you the speed you need.  
+
+FORTHプログラマーにとって、ある問題をコンピュータで処理する価値があるならば、それはコンピュータでうまく処理する価値がある。その哲学は、"ちょっとした計算ですぐに答えが知りたいなら、手持ちの電卓を使った方がいい "というものです。電卓が結果を表示するのに0.5秒かかっても気にしないでしょう。しかし、コンピュータに投資しているのであれば、同じ計算を何度も何度も繰り返さなければならないだろう。固定小数点演算を使えば、必要なスピードが得られる。 
+
+Is the extra speed that noticeable? Yes, it is. A floating - point multiplication or division can take three times as long as its equivalent fixed-point calculation. The difference is really noticeable in programs which have to do a lot of calculations before sending results to a terminal or taking some action. [3] Most mini- and microcomputers don't "think" in floating-point; you pay a heavy penalty for making them act as though they do.
+
+その速度はそれほど顕著なものなのだろうか？そうです。浮動小数点数の掛け算や割り算は、同等の固定小数点数の計算に比べて3倍の時間がかかることがあります。この差は、結果を端末に送ったり、何らかのアクションを起こしたりする前に多くの計算をしなければならないプログラムで顕著に現れます。[3] ほとんどのミニコンピュータやマイクロコンピュータは、浮動小数点で「考える」ことはしません。
+
+Here are some of the reasons you might prefer to have floating-point capability.
+
+以下に、浮動小数点演算機能を搭載した方が良い理由をいくつか挙げます。
+
+1. You want to use your computer like a calculator on floating-point data.
+
+2. You value the initial programming time more highly than the execution time spent every time the calculation is performed.
+
+3. You want a number to be able to describe a very large dynamic range (greater than -2 billion to +2 billion). 
+
+4. Your system includes a discrete hardware floating-point multiply (a separate "chip" whose only job is to perform floating-point multiplication at super high speeds).
+
+All of these are valid reasons. Even Charles Moore, perhaps the staunchest advocate of simplicity in the programming community, has occasionally employed floating-point routines when the hardware supported it. Other FORTH programmers have written floating-point routines for their mini- and microcomputers. But the mainstream FORTH philosophy remains: "In most cases, you don't need to pay for floating-point."
+
+1. コンピュータを浮動小数点データの電卓のように使いたい。
+
+2. 計算を実行するたびにかかる実行時間よりも、最初のプログラミング時間を重視したい。
+
+3. 非常に大きなダイナミックレンジ（-20億から＋20億以上）を表現できる数値が欲しい。
+
+4. システムに個別のハードウェア浮動小数点乗算器（超高速で浮動小数点乗算を実行することだけが仕事の別個の「チップ」）が含まれている。
+
+これらはすべて正当な理由である。おそらく、プログラミング界で最も単純化を堅く支持するチャールズ・ムーアでさえ、ハードウェアがサポートしていれば、浮動小数点ルーチンを使うことがありました。他のFORTHプログラマーも、ミニコンピュータやマイクロコンピュータのために浮動小数点ルーチンを書いています。しかし、FORTHの主流の哲学は変わっていません： "ほとんどの場合、浮動小数点にお金を払う必要はない"。
+
+FORTH backs its philosophy by supplying the programmer with a unique set of high-level commands called "scaling operators." We'll introduce the first of these commands in the next section. (The final example in Chap. 12 illustrates the use of scaling techniques.)
+
+FORTHは、プログラマーに "スケーリング演算子"と呼ばれるユニークな高レベルコマンド群を提供することで、その哲学を裏付けています。これらのコマンドの最初のものを次の章で紹介します。(第12章の最後の例は、スケーリング技法の使用法を示している)。
