@@ -20,6 +20,14 @@
 
 ### 外部ファイル読み込み案(12/19)
 
+* `WORD`が直接1文字入力することは断念した。インタプリタが行入力単位処理が存在する(プロンプト出す)、伝統的に、主要な実装はすべて「1行入力->バッファからWORDはワード切り出す」となっており、そこから外れることは気持ち悪い。
+* 一方、外部ファイル入力とキー入力は1文字入力単位で統一したい気持ちも高い。
+* プロンプト出しは、「行入力してから出す」ではだめで、「行入力開始の最初の1文字読み込みに入る前に出す」でないとプロンプト出しにならない。
+* 外部ファイル読み込み時はプロンプト出しはさせない(させたくない、してはいけない)。
+* とすると、外部ファイル入力時を文字読み込みに入る前に知る方法を用意する必要がある。
+
+ここまで考えて以下の方針を決めた。
+
 * acceptを介して読み込む(つまり、外部ファイル入力も行単位で処理される)
 * acceptは`getchar`を使って1文字読み込む。
 * `getchar`が、「外部ファイルをすべて読み込んだあとシリアル入力に切り替える」とする(テストしていないがコード書き済)。
@@ -33,7 +41,7 @@
   * `accept`でコメントを削除して読み込む。
   * `//`のコメントを削除(バッファ入力後にスキャン)。使えると便利だが結構面倒くさい。
   * `( ... )`も削除する(読み込み時に削除)。
-* 追加定義辞書のダンプ(デバッグ時に見るため、ファイルとして落としたいのでエミュレータに組み込む、バイナリをファイルにはいてmakedict.shを手で起動するか)
+* 追加定義辞書のダンプ(デバッグ時に見るため、ファイルとして落としたいのでエミュレータに組み込む、バイナリをファイルにはいてmakedict.shを手で起動するか、SBC版はダンプ先が面倒、フラッシュ書き込み？)
 * ループ構造: 
   + begin ... again : 無限ループ
   + begin ... until / until: (f -- ): ループ末尾でfalseなら抜ける
@@ -82,7 +90,7 @@
 * `I'`はリターンスタックの2番目をパラメータスタックに戻す
 * `J`はリターンスタックの3番目をパラメータスタックに戻す
 * `DO`はインデックスと上限値をパラメータスタックからリターンスタックに移動させる。
-* 
+
 
 ### Starting Forthの注3
 
@@ -114,7 +122,7 @@ FORTHプログラマーにとって、ある問題をコンピュータで処理
 
 Is the extra speed that noticeable? Yes, it is. A floating - point multiplication or division can take three times as long as its equivalent fixed-point calculation. The difference is really noticeable in programs which have to do a lot of calculations before sending results to a terminal or taking some action. [3] Most mini- and microcomputers don't "think" in floating-point; you pay a heavy penalty for making them act as though they do.
 
-その速度はそれほど顕著なものなのだろうか？そうです。浮動小数点数の掛け算や割り算は、同等の固定小数点数の計算に比べて3倍の時間がかかることがあります。この差は、結果を端末に送ったり、何らかのアクションを起こしたりする前に多くの計算をしなければならないプログラムで顕著に現れます。[3] ほとんどのミニコンピュータやマイクロコンピュータは、浮動小数点で「考える」ことはしません。
+その速度はそれほど顕著なものなのだろうか? そうです。浮動小数点数の掛け算や割り算は、同等の固定小数点数の計算に比べて3倍の時間がかかることがあります。この差は、結果を端末に送ったり、何らかのアクションを起こしたりする前に多くの計算をしなければならないプログラムで顕著に現れます。[3] ほとんどのミニコンピュータやマイクロコンピュータは、浮動小数点で「考える」ことはしません。
 
 Here are some of the reasons you might prefer to have floating-point capability.
 
@@ -130,16 +138,17 @@ Here are some of the reasons you might prefer to have floating-point capability.
 
 All of these are valid reasons. Even Charles Moore, perhaps the staunchest advocate of simplicity in the programming community, has occasionally employed floating-point routines when the hardware supported it. Other FORTH programmers have written floating-point routines for their mini- and microcomputers. But the mainstream FORTH philosophy remains: "In most cases, you don't need to pay for floating-point."
 
-1. コンピュータを浮動小数点データの電卓のように使いたい。
+1. コンピュータを浮動小数点数電卓のように使いたい。
 
-2. 計算を実行するたびにかかる実行時間よりも、最初のプログラミング時間を重視したい。
+2. 計算を実行するたびにかかる実行時間よりも、最初に必要なプログラミング時間を重視したい。
 
-3. 非常に大きなダイナミックレンジ（-20億から＋20億以上）を表現できる数値が欲しい。
+3. 非常に大きなダイナミックレンジ(-20億から＋20億以上)を表現できる数値が欲しい。
 
-4. システムに個別のハードウェア浮動小数点乗算器（超高速で浮動小数点乗算を実行することだけが仕事の別個の「チップ」）が含まれている。
+4. システムに個別のハードウェア浮動小数点乗算器(超高速で浮動小数点乗算を実行するに特化した別チップ）を搭載している。
 
-これらはすべて正当な理由である。おそらく、プログラミング界で最も単純化を堅く支持するチャールズ・ムーアでさえ、ハードウェアがサポートしていれば、浮動小数点ルーチンを使うことがありました。他のFORTHプログラマーも、ミニコンピュータやマイクロコンピュータのために浮動小数点ルーチンを書いています。しかし、FORTHの主流の哲学は変わっていません： "ほとんどの場合、浮動小数点にお金を払う必要はない"。
+
+これらはすべて正当な理由である。プログラミング界で最も単純化を堅く支持するといってもいいだろうチャールズ・ムーアでさえ、ハードウェアがサポートしていれば、浮動小数点ルーチンを使うことがありました。他のFORTHプログラマーも、ミニコンピュータやマイクロコンピュータのために浮動小数点ルーチンを書いています。しかし、FORTH哲学の主流は変わっていません: "ほとんどの場合、浮動小数点にお金を払う必要はない"。
 
 FORTH backs its philosophy by supplying the programmer with a unique set of high-level commands called "scaling operators." We'll introduce the first of these commands in the next section. (The final example in Chap. 12 illustrates the use of scaling techniques.)
 
-FORTHは、プログラマーに "スケーリング演算子"と呼ばれるユニークな高レベルコマンド群を提供することで、その哲学を裏付けています。これらのコマンドの最初のものを次の章で紹介します。(第12章の最後の例は、スケーリング技法の使用法を示している)。
+FORTHは、プログラマに "スケーリング演算子"と呼ばれるユニークな高レベルコマンド群を提供することで、その哲学を裏付けています。これらのコマンドの最初のものを次の章で紹介します(第12章の最後の例は、スケーリング技法の使用法を示している)。
